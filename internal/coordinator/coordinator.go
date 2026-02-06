@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math/rand"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -120,10 +122,19 @@ func (c *Coordinator) handleCommand(cmd Command) {
 		c.handleDraftPickTimeout(cmd)
 	case BotLobbyTimeout:
 		c.handleBotLobbyTimeout(cmd)
+	case AdminCancelMatch:
+		cmd.Response <- c.handleAdminCancelMatch(cmd)
+	case AdminSetMatchResult:
+		cmd.Response <- c.handleAdminSetMatchResult(cmd)
+	case AdminKickFromQueue:
+		cmd.Response <- c.handleAdminKickFromQueue(cmd)
+	case AdminSetLobbySettings:
+		cmd.Response <- c.handleAdminSetLobbySettings(cmd)
 	case getStateCmd:
 		cmd.Response <- stateSnapshot{
-			Queue:   c.state.Queue,
-			Matches: c.state.Matches,
+			Queue:         c.state.Queue,
+			Matches:       c.state.Matches,
+			LobbySettings: c.state.LobbySettings,
 		}
 	case getPlayerMatchCmd:
 		cmd.Response <- c.state.GetPlayerMatch(cmd.PlayerID)
@@ -133,7 +144,6 @@ func (c *Coordinator) handleCommand(cmd Command) {
 func (c *Coordinator) handleJoinQueue(cmd JoinQueue) error {
 	// Check if player is already in queue
 	if c.state.IsPlayerInQueue(cmd.Player.SteamID) {
-		println()
 		return errors.New("already in queue")
 	}
 
@@ -295,13 +305,12 @@ func (c *Coordinator) startDraft(match *Match) {
 		return
 	}
 
-	// Select captains (last two players who joined)
-	players := match.Players
-	captains := [2]Player{players[len(players)-2], players[len(players)-1]}
+	// Select captains based on captain priority (higher = more likely)
+	captains := selectCaptains(match.Players)
 
 	// Available players are everyone except captains
 	var available []Player
-	for _, p := range players {
+	for _, p := range match.Players {
 		if p.SteamID != captains[0].SteamID && p.SteamID != captains[1].SteamID {
 			available = append(available, p)
 		}
@@ -315,8 +324,8 @@ func (c *Coordinator) startDraft(match *Match) {
 	match.CurrentPicker = 0 // Radiant picks first
 	match.PickCount = 0
 
-	log.Printf("Match %s started draft phase. Captains: %s (Radiant), %s (Dire)",
-		match.ID, captains[0].Name, captains[1].Name)
+	log.Printf("Match %s started draft phase. Captains: %s (priority %d, Radiant), %s (priority %d, Dire)",
+		match.ID, captains[0].Name, captains[0].CaptainPriority, captains[1].Name, captains[1].CaptainPriority)
 
 	c.emit(DraftStarted{
 		MatchID:   match.ID,
@@ -376,13 +385,13 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 		match.Dire = append(match.Dire, *pickedPlayer)
 	}
 
-	log.Printf("Captain %s picked %s for %s",
+	log.Printf("Captain %s picked %s for %s (pick %d)",
 		currentCaptain.Name, pickedPlayer.Name,
-		map[int]string{0: "Radiant", 1: "Dire"}[match.CurrentPicker])
+		map[int]string{0: "Radiant", 1: "Dire"}[match.CurrentPicker], match.PickCount+1)
 
-	// Increment pick count and alternate turns
+	// Increment pick count and determine next picker using 1-2-2-2-1 order
 	match.PickCount++
-	match.CurrentPicker = 1 - match.CurrentPicker
+	match.CurrentPicker = getPickerForPickCount(match.PickCount)
 
 	c.emit(DraftUpdated{
 		MatchID:          match.ID,
@@ -414,10 +423,11 @@ func (c *Coordinator) completeDraft(match *Match) {
 	log.Printf("Match %s draft complete, requesting bot lobby", match.ID)
 
 	c.emit(RequestBotLobby{
-		MatchID: match.ID,
-		Players: match.Players,
-		Radiant: match.Radiant,
-		Dire:    match.Dire,
+		MatchID:  match.ID,
+		Players:  match.Players,
+		Radiant:  match.Radiant,
+		Dire:     match.Dire,
+		GameMode: c.state.LobbySettings.GameMode,
 	})
 }
 
@@ -565,6 +575,9 @@ func (c *Coordinator) handleBotGameEnded(cmd BotGameEnded) {
 		MatchID:     cmd.MatchID,
 		DotaMatchID: cmd.DotaMatchID,
 		Players:     match.Players,
+		Radiant:     match.Radiant,
+		Dire:        match.Dire,
+		Winner:      cmd.Winner,
 	})
 
 	// Remove match
@@ -578,16 +591,17 @@ func (c *Coordinator) handleBotGameEnded(cmd BotGameEnded) {
 
 // stateSnapshot holds a snapshot of the coordinator state.
 type stateSnapshot struct {
-	Queue   []Player
-	Matches map[string]*Match
+	Queue         []Player
+	Matches       map[string]*Match
+	LobbySettings LobbySettings
 }
 
 // GetState returns a snapshot of the current state.
-func (c *Coordinator) GetState() ([]Player, map[string]*Match) {
+func (c *Coordinator) GetState() ([]Player, map[string]*Match, LobbySettings) {
 	respCh := make(chan stateSnapshot, 1)
 	c.commands <- getStateCmd{Response: respCh}
 	resp := <-respCh
-	return resp.Queue, resp.Matches
+	return resp.Queue, resp.Matches, resp.LobbySettings
 }
 
 // GetPlayerMatch returns the match a player is in, or nil.
@@ -611,3 +625,161 @@ type getPlayerMatchCmd struct {
 }
 
 func (getPlayerMatchCmd) command() {}
+
+// selectCaptains selects two captains from the player list.
+// Players with higher CaptainPriority are more likely to be selected.
+// If priorities are equal, selection is random.
+func selectCaptains(players []Player) [2]Player {
+	if len(players) < 2 {
+		return [2]Player{}
+	}
+
+	// Create a copy and sort by priority (descending), with random tiebreaker
+	sorted := make([]Player, len(players))
+	copy(sorted, players)
+
+	// Shuffle first to randomize players with equal priority
+	rand.Shuffle(len(sorted), func(i, j int) {
+		sorted[i], sorted[j] = sorted[j], sorted[i]
+	})
+
+	// Stable sort by priority (higher priority first)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].CaptainPriority > sorted[j].CaptainPriority
+	})
+
+	return [2]Player{sorted[0], sorted[1]}
+}
+
+// getPickerForPickCount returns which captain (0=Radiant, 1=Dire) should pick
+// for the given pick number using 1-2-2-2-1 draft order.
+// Pick 0: Radiant (1)
+// Pick 1-2: Dire (2)
+// Pick 3-4: Radiant (2)
+// Pick 5-6: Dire (2)
+// Pick 7: Radiant (1)
+func getPickerForPickCount(pickCount int) int {
+	// 1-2-2-2-1 pattern for 8 picks
+	switch pickCount {
+	case 0:
+		return 0 // Radiant
+	case 1, 2:
+		return 1 // Dire
+	case 3, 4:
+		return 0 // Radiant
+	case 5, 6:
+		return 1 // Dire
+	case 7:
+		return 0 // Radiant
+	default:
+		// For any additional picks beyond 8, alternate
+		return pickCount % 2
+	}
+}
+
+// handleAdminCancelMatch cancels a match regardless of state.
+func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
+	match := c.state.GetMatch(cmd.MatchID)
+	if match == nil {
+		return errors.New("match not found")
+	}
+
+	log.Printf("Admin cancelled match %s (state: %v, return to queue: %v)", cmd.MatchID, match.State, cmd.ReturnToQueue)
+
+	if cmd.ReturnToQueue {
+		// Return all players to queue
+		for _, p := range match.Players {
+			if !c.state.IsPlayerInQueue(p.SteamID) {
+				c.state.Queue = append(c.state.Queue, p)
+			}
+		}
+	}
+
+	// Emit cancellation event
+	c.emit(MatchCancelledByAdmin{
+		MatchID:         cmd.MatchID,
+		ReturnedToQueue: cmd.ReturnToQueue,
+		Players:         match.Players,
+	})
+	c.emit(QueueUpdated{Queue: c.state.Queue})
+
+	// Remove match
+	delete(c.state.Matches, cmd.MatchID)
+
+	// Check if queue is full again
+	if len(c.state.Queue) >= MaxPlayers {
+		c.startMatchAcceptance()
+	}
+
+	return nil
+}
+
+// handleAdminSetMatchResult manually sets the result of a match.
+func (c *Coordinator) handleAdminSetMatchResult(cmd AdminSetMatchResult) error {
+	match := c.state.GetMatch(cmd.MatchID)
+	if match == nil {
+		return errors.New("match not found")
+	}
+
+	if cmd.Winner != "radiant" && cmd.Winner != "dire" {
+		return errors.New("winner must be 'radiant' or 'dire'")
+	}
+
+	log.Printf("Admin set match %s result: %s wins", cmd.MatchID, cmd.Winner)
+
+	// Emit completion event with admin-set winner
+	winner := cmd.Winner
+	c.emit(MatchCompleted{
+		MatchID:     cmd.MatchID,
+		DotaMatchID: match.DotaMatchID,
+		Players:     match.Players,
+		Radiant:     match.Radiant,
+		Dire:        match.Dire,
+		Winner:      &winner,
+	})
+
+	// Remove match
+	delete(c.state.Matches, cmd.MatchID)
+
+	// Check if queue has enough for new match
+	if len(c.state.Queue) >= MaxPlayers {
+		c.startMatchAcceptance()
+	}
+
+	return nil
+}
+
+// handleAdminKickFromQueue removes a player from the queue.
+func (c *Coordinator) handleAdminKickFromQueue(cmd AdminKickFromQueue) error {
+	found := false
+	newQueue := make([]Player, 0, len(c.state.Queue))
+	for _, p := range c.state.Queue {
+		if p.SteamID == cmd.PlayerID {
+			found = true
+			log.Printf("Admin kicked player %s from queue", p.Name)
+		} else {
+			newQueue = append(newQueue, p)
+		}
+	}
+
+	if !found {
+		return errors.New("player not in queue")
+	}
+
+	c.state.Queue = newQueue
+	c.emit(QueueUpdated{Queue: c.state.Queue})
+
+	return nil
+}
+
+// handleAdminSetLobbySettings updates the lobby settings.
+func (c *Coordinator) handleAdminSetLobbySettings(cmd AdminSetLobbySettings) error {
+	if _, ok := ValidGameModes[cmd.Settings.GameMode]; !ok {
+		return errors.New("invalid game mode")
+	}
+
+	c.state.LobbySettings = cmd.Settings
+	log.Printf("Admin updated lobby settings: game mode = %s", cmd.Settings.GameMode)
+
+	return nil
+}

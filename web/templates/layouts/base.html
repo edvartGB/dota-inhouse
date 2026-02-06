@@ -12,6 +12,9 @@
     <header>
         <h1>Dota Inhouse</h1>
         <nav>
+            <a href="/" class="nav-link">Queue</a>
+            <a href="/history" class="nav-link">History</a>
+            <a href="/leaderboard" class="nav-link">Leaderboard</a>
             {{if .User}}
                 <span class="user-info">{{.User.Name}}</span>
                 <a href="/auth/logout" class="btn btn-secondary">Logout</a>

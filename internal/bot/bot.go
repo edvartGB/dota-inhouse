@@ -49,28 +49,32 @@ func NewBot(username, password string) *Bot {
 }
 
 func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, maxRetries int, timeout time.Duration) {
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		log.Printf("[%s] Connection attempt %d/%d", b.name, attempt, maxRetries)
+	attempt := 0
+	for {
+		attempt++
+		log.Printf("[%s] Connection attempt %d", b.name, attempt)
 
 		firstEvent := b.attemptConnection(timeout)
 		if firstEvent != nil {
 			log.Printf("[%s] Connection established, listening to events", b.name)
 			b.handleEvents(loginInfo, firstEvent)
-			return
+			// If handleEvents returns, the connection was lost - reconnect
+			log.Printf("[%s] Connection lost, will reconnect...", b.name)
+			attempt = 0 // Reset attempt counter after successful connection
 		}
 
-		if attempt < maxRetries {
-			backoff := time.Duration(attempt) * 5 * time.Second
-			log.Printf("[%s] Connection failed, retrying in %v...", b.name, backoff)
-			time.Sleep(backoff)
-
-			b.mu.Lock()
-			b.client = steam.NewClient()
-			b.mu.Unlock()
+		// Calculate backoff: 5s, 10s, 15s, ... up to 60s max
+		backoff := time.Duration(attempt) * 5 * time.Second
+		if backoff > 60*time.Second {
+			backoff = 60 * time.Second
 		}
+		log.Printf("[%s] Connection failed, retrying in %v...", b.name, backoff)
+		time.Sleep(backoff)
+
+		b.mu.Lock()
+		b.client = steam.NewClient()
+		b.mu.Unlock()
 	}
-
-	log.Printf("[%s] Failed to connect after %d attempts", b.name, maxRetries)
 }
 
 func (b *Bot) attemptConnection(timeout time.Duration) interface{} {
@@ -148,9 +152,27 @@ func (b *Bot) IsAvailable() bool {
 // LobbyJoinTimeout is the duration players have to join the lobby.
 const LobbyJoinTimeout = 1 * time.Minute
 
+// gameModeFromString converts a game mode string to the Dota 2 protocol value.
+func gameModeFromString(mode string) protocol.DOTA_GameMode {
+	switch mode {
+	case "ap":
+		return protocol.DOTA_GameMode_DOTA_GAMEMODE_AP
+	case "cm":
+		return protocol.DOTA_GameMode_DOTA_GAMEMODE_CM
+	case "cd":
+		return protocol.DOTA_GameMode_DOTA_GAMEMODE_CD
+	case "rd":
+		return protocol.DOTA_GameMode_DOTA_GAMEMODE_RD
+	case "ar":
+		return protocol.DOTA_GameMode_DOTA_GAMEMODE_AR
+	default:
+		return protocol.DOTA_GameMode_DOTA_GAMEMODE_CM
+	}
+}
+
 // CreateLobby creates a Dota 2 practice lobby for the match.
 // Returns true if lobby was successfully created and monitored, false if it failed early.
-func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordinator.Player, radiant []coordinator.Player, dire []coordinator.Player, commands chan<- coordinator.Command) bool {
+func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordinator.Player, radiant []coordinator.Player, dire []coordinator.Player, gameMode string, commands chan<- coordinator.Command) bool {
 	b.mu.Lock()
 	if !b.loggedIn {
 		b.mu.Unlock()
@@ -185,10 +207,12 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 	log.Printf("[%s] Creating lobby for match %s", b.name, matchID)
 
 	lobbyName := fmt.Sprintf("Inhouse Match %s", matchID[:8])
+	dotaGameMode := gameModeFromString(gameMode)
+	log.Printf("[%s] Creating lobby with game mode: %s (%v)", b.name, gameMode, dotaGameMode)
 	b.dota2Client.LeaveCreateLobby(b.ctx, &protocol.CMsgPracticeLobbySetDetails{
-		AllowCheats: proto.Bool(true),
+		AllowCheats: proto.Bool(false),
 		GameName:    proto.String(lobbyName),
-		GameMode:    proto.Uint32(uint32(protocol.DOTA_GameMode_DOTA_GAMEMODE_1V1MID)),
+		GameMode:    proto.Uint32(uint32(dotaGameMode)),
 		Visibility:  protocol.DOTALobbyVisibility_DOTALobbyVisibility_Friends.Enum(),
 	}, true)
 

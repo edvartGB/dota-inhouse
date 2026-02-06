@@ -15,6 +15,8 @@ import (
 	"github.com/edvart/dota-inhouse/internal/auth"
 	"github.com/edvart/dota-inhouse/internal/bot"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/dotaapi"
+	"github.com/edvart/dota-inhouse/internal/matchrecorder"
 	"github.com/edvart/dota-inhouse/internal/store"
 	"github.com/edvart/dota-inhouse/internal/web"
 )
@@ -30,6 +32,9 @@ func main() {
 	// Bot credentials (host bots)
 	bot1User := getEnv("BOT1_USERNAME", "")
 	bot1Pass := getEnv("BOT1_PASSWORD", "")
+
+	// Admin Steam IDs (comma-separated)
+	adminSteamIDs := getEnv("ADMIN_STEAM_IDS", "")
 
 	// Configurable max players
 	if maxPlayersStr := getEnv("MAX_PLAYERS", ""); maxPlayersStr != "" {
@@ -90,8 +95,9 @@ func main() {
 	staticFS := os.DirFS(staticDir)
 
 	// Initialize web server
-	server := web.NewServer(coord, steamAuth, sessions, templates, staticFS, web.Config{
-		DevMode: devMode,
+	server := web.NewServer(coord, steamAuth, sessions, db, templates, staticFS, web.Config{
+		DevMode:       devMode,
+		AdminSteamIDs: adminSteamIDs,
 	})
 
 	// Create context for graceful shutdown
@@ -103,6 +109,38 @@ func main() {
 
 	// Start SSE hub
 	server.StartSSE(coord.Events())
+
+	// Initialize Dota API client (uses same Steam API key)
+	var dotaAPIClient *dotaapi.Client
+	if steamAPIKey != "" {
+		dotaAPIClient = dotaapi.NewClient(steamAPIKey)
+		log.Println("Dota API client initialized")
+	} else {
+		log.Println("Warning: No Steam API key, match details won't be fetched from Dota API")
+	}
+
+	// Start match recorder
+	recorder := matchrecorder.New(db, dotaAPIClient)
+	recorderEvents := coord.Subscribe()
+	go recorder.Run(ctx, recorderEvents)
+
+	// Start session cleanup job (runs every hour)
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := db.DeleteExpiredSessions(ctx); err != nil {
+					log.Printf("Failed to cleanup expired sessions: %v", err)
+				} else {
+					log.Println("Cleaned up expired sessions")
+				}
+			}
+		}
+	}()
 
 	// Initialize and start bot manager if credentials are configured
 	var botManager *bot.Manager

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"html/template"
 	"io/fs"
 	"os"
@@ -50,6 +51,15 @@ func templateFuncs() template.FuncMap {
 		"sub": func(a, b int) int {
 			return a - b
 		},
+		"add": func(a, b int) int {
+			return a + b
+		},
+		"abs": func(a int) int {
+			if a < 0 {
+				return -a
+			}
+			return a
+		},
 		"iterate": func(n int) []int {
 			result := make([]int, n)
 			for i := range result {
@@ -93,6 +103,20 @@ func templateFuncs() template.FuncMap {
 			default:
 				return ""
 			}
+		},
+		"deref": func(s *string) string {
+			if s == nil {
+				return ""
+			}
+			return *s
+		},
+		"formatDuration": func(seconds *int) string {
+			if seconds == nil {
+				return ""
+			}
+			m := *seconds / 60
+			s := *seconds % 60
+			return fmt.Sprintf("%d:%02d", m, s)
 		},
 	}
 }

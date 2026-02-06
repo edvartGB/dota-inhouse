@@ -71,10 +71,11 @@ func (MatchCancelled) event() {}
 
 // RequestBotLobby is emitted when the draft is complete and a bot should create the lobby.
 type RequestBotLobby struct {
-	MatchID string
-	Players []Player
-	Radiant []Player
-	Dire    []Player
+	MatchID  string
+	Players  []Player
+	Radiant  []Player
+	Dire     []Player
+	GameMode string // "cm", "ap", "cd", "rd", "ar"
 }
 
 func (RequestBotLobby) event() {}
@@ -92,6 +93,9 @@ type MatchCompleted struct {
 	MatchID     string
 	DotaMatchID uint64
 	Players     []Player
+	Radiant     []Player
+	Dire        []Player
+	Winner      *string // "radiant", "dire", or nil if unknown
 }
 
 func (MatchCompleted) event() {}
@@ -113,3 +117,12 @@ type LobbyCancelled struct {
 }
 
 func (LobbyCancelled) event() {}
+
+// MatchCancelledByAdmin is emitted when an admin cancels a match.
+type MatchCancelledByAdmin struct {
+	MatchID         string
+	ReturnedToQueue bool
+	Players         []Player
+}
+
+func (MatchCancelledByAdmin) event() {}

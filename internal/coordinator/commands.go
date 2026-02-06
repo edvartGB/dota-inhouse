@@ -69,6 +69,7 @@ func (BotGameStarted) command() {}
 type BotGameEnded struct {
 	MatchID     string
 	DotaMatchID uint64
+	Winner      *string // "radiant", "dire", or nil if unknown
 }
 
 func (BotGameEnded) command() {}
@@ -88,3 +89,37 @@ type BotLobbyTimeout struct {
 }
 
 func (BotLobbyTimeout) command() {}
+
+// AdminCancelMatch cancels any match regardless of state.
+type AdminCancelMatch struct {
+	MatchID        string
+	ReturnToQueue  bool // If true, return players to queue
+	Response       chan error
+}
+
+func (AdminCancelMatch) command() {}
+
+// AdminSetMatchResult manually sets the result of a match.
+type AdminSetMatchResult struct {
+	MatchID  string
+	Winner   string // "radiant" or "dire"
+	Response chan error
+}
+
+func (AdminSetMatchResult) command() {}
+
+// AdminKickFromQueue removes a player from the queue.
+type AdminKickFromQueue struct {
+	PlayerID string
+	Response chan error
+}
+
+func (AdminKickFromQueue) command() {}
+
+// AdminSetLobbySettings updates the lobby settings.
+type AdminSetLobbySettings struct {
+	Settings LobbySettings
+	Response chan error
+}
+
+func (AdminSetLobbySettings) command() {}

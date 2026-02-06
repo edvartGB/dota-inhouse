@@ -1,0 +1,327 @@
+{{define "admin.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Dota Inhouse</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .admin-section {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .admin-section h3 {
+            margin-bottom: 1rem;
+            color: var(--accent-primary);
+        }
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .admin-table th,
+        .admin-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .admin-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+        }
+        .admin-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+        .state-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .state-accepting { background: #f0ad4e22; color: #f0ad4e; }
+        .state-drafting { background: rgba(74, 158, 255, 0.13); color: var(--accent-primary); }
+        .state-waiting { background: #5bc0de22; color: #5bc0de; }
+        .state-ingame { background: #5cb85c22; color: #5cb85c; }
+        .empty-state {
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 1rem;
+        }
+        .player-tag {
+            display: inline-block;
+            background: var(--bg-tertiary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            margin: 0.1rem;
+            font-size: 0.85rem;
+        }
+        .team-radiant { border-left: 3px solid var(--accent-radiant); }
+        .team-dire { border-left: 3px solid var(--accent-dire); }
+        .settings-form {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .settings-form label {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+        }
+        .settings-form select {
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+        .priority-select {
+            padding: 0.3rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            width: 60px;
+        }
+        @media (max-width: 768px) {
+            .admin-table { font-size: 0.85rem; }
+            .admin-table th, .admin-table td { padding: 0.5rem; }
+            .match-header-row { flex-direction: column; gap: 0.5rem; }
+            .admin-section { padding: 1rem; overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Admin Panel</h1>
+        <nav>
+            <a href="/" class="nav-link">Queue</a>
+            <a href="/history" class="nav-link">History</a>
+            <a href="/leaderboard" class="nav-link">Leaderboard</a>
+            <a href="/admin" class="nav-link" style="color: var(--accent-primary);">Admin</a>
+            {{if .User}}
+                <span class="user-info">{{.User.Name}}</span>
+                <a href="/auth/logout" class="btn btn-secondary">Logout</a>
+            {{end}}
+        </nav>
+    </header>
+
+    <main>
+        <div class="container">
+
+            <div class="admin-section">
+                <h3>Lobby Settings</h3>
+                <form class="settings-form" action="/admin/settings" method="POST">
+                    <div>
+                        <label for="game_mode">Game Mode</label>
+                        <select name="game_mode" id="game_mode">
+                            {{range $key, $name := .ValidGameModes}}
+                            <option value="{{$key}}" {{if eq $key $.LobbySettings.GameMode}}selected{{end}}>{{$name}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Settings</button>
+                </form>
+            </div>
+
+            <div class="admin-section">
+                <h3>Queue ({{len .Queue}} players)</h3>
+                {{if .Queue}}
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Steam ID</th>
+                            <th>Captain Priority</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Queue}}
+                        <tr>
+                            <td>
+                                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" style="width:24px;height:24px;border-radius:4px;vertical-align:middle;margin-right:0.5rem;">{{end}}
+                                {{.Name}}
+                            </td>
+                            <td><code>{{.SteamID}}</code></td>
+                            <td>{{.CaptainPriority}}</td>
+                            <td>
+                                <button class="btn btn-danger btn-small"
+                                    hx-post="/admin/queue/kick/{{.SteamID}}"
+                                    hx-swap="none"
+                                    hx-confirm="Kick {{.Name}} from queue?">
+                                    Kick
+                                </button>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                {{else}}
+                <p class="empty-state">Queue is empty</p>
+                {{end}}
+            </div>
+
+            <div class="admin-section">
+                <h3>Active Matches ({{len .Matches}})</h3>
+                {{if .Matches}}
+                {{range $id, $match := .Matches}}
+                <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <div class="match-header-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div>
+                            <strong>Match:</strong> <code>{{$id}}</code>
+                            <span class="state-badge state-{{matchStateClass $match.State}}">{{matchStateName $match.State}}</span>
+                        </div>
+                        <div class="admin-actions">
+                            <button class="btn btn-secondary btn-small"
+                                hx-post="/admin/match/{{$id}}/cancel?return=true"
+                                hx-swap="none"
+                                hx-confirm="Cancel match and return players to queue?">
+                                Cancel (Requeue)
+                            </button>
+                            <button class="btn btn-danger btn-small"
+                                hx-post="/admin/match/{{$id}}/cancel?return=false"
+                                hx-swap="none"
+                                hx-confirm="Cancel match WITHOUT returning players to queue?">
+                                Cancel (No Requeue)
+                            </button>
+                        </div>
+                    </div>
+
+                    {{if $match.DotaMatchID}}
+                    <p><strong>Dota Match ID:</strong> {{$match.DotaMatchID}}</p>
+                    {{end}}
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                        <div class="team-radiant" style="padding-left: 0.5rem;">
+                            <strong style="color: var(--accent-radiant);">Radiant</strong>
+                            {{if $match.Captains}}
+                                <span class="player-tag">C: {{index $match.Captains 0 | getPlayerName}}</span>
+                            {{end}}
+                            <div style="margin-top: 0.5rem;">
+                                {{range $match.Radiant}}
+                                    <span class="player-tag">{{.Name}}</span>
+                                {{end}}
+                                {{if not $match.Radiant}}<span class="empty-state">No picks yet</span>{{end}}
+                            </div>
+                        </div>
+                        <div class="team-dire" style="padding-left: 0.5rem;">
+                            <strong style="color: var(--accent-dire);">Dire</strong>
+                            {{if $match.Captains}}
+                                <span class="player-tag">C: {{index $match.Captains 1 | getPlayerName}}</span>
+                            {{end}}
+                            <div style="margin-top: 0.5rem;">
+                                {{range $match.Dire}}
+                                    <span class="player-tag">{{.Name}}</span>
+                                {{end}}
+                                {{if not $match.Dire}}<span class="empty-state">No picks yet</span>{{end}}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <strong>Set Result:</strong>
+                        <div class="admin-actions" style="margin-top: 0.5rem;">
+                            <button class="btn btn-small" style="background: var(--accent-radiant);"
+                                hx-post="/admin/match/{{$id}}/result/radiant"
+                                hx-swap="none"
+                                hx-confirm="Set Radiant as winner for this match?">
+                                Radiant Wins
+                            </button>
+                            <button class="btn btn-small" style="background: var(--accent-dire);"
+                                hx-post="/admin/match/{{$id}}/result/dire"
+                                hx-swap="none"
+                                hx-confirm="Set Dire as winner for this match?">
+                                Dire Wins
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+                {{else}}
+                <p class="empty-state">No active matches</p>
+                {{end}}
+            </div>
+
+            <div class="admin-section">
+                <h3>Player Management ({{len .Users}} registered)</h3>
+                {{if .Users}}
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Steam ID</th>
+                            <th>Captain Priority</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Users}}
+                        <tr>
+                            <td>
+                                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" style="width:24px;height:24px;border-radius:4px;vertical-align:middle;margin-right:0.5rem;">{{end}}
+                                {{.Name}}
+                            </td>
+                            <td><code>{{.SteamID}}</code></td>
+                            <td>
+                                {{$cp := .CaptainPriority}}
+                                <select class="priority-select" onchange="setPriority('{{.SteamID}}', this.value)">
+                                    {{range iterate 10}}
+                                    <option value="{{add . 1}}" {{if eq (add . 1) $cp}}selected{{end}}>{{add . 1}}</option>
+                                    {{end}}
+                                </select>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                {{else}}
+                <p class="empty-state">No registered users</p>
+                {{end}}
+            </div>
+
+            <div class="admin-section">
+                <h3>Quick Actions</h3>
+                <div class="admin-actions">
+                    <a href="/admin" class="btn btn-secondary">Refresh State</a>
+                    <a href="/admin/state" class="btn btn-secondary" target="_blank">View JSON State</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Refresh page after any htmx request completes
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful) {
+                setTimeout(function() {
+                    window.location.reload();
+                }, 500);
+            }
+        });
+
+        function setPriority(steamId, priority) {
+            fetch('/admin/player/' + steamId + '/priority/' + priority, { method: 'POST' })
+                .then(function(resp) {
+                    if (!resp.ok) {
+                        resp.text().then(function(t) { alert('Error: ' + t); });
+                    }
+                })
+                .catch(function(err) { alert('Error: ' + err); });
+        }
+    </script>
+</body>
+</html>
+{{end}}

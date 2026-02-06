@@ -81,7 +81,7 @@ func (m *Manager) handleLobbyRequest(ctx context.Context, req coordinator.Reques
 		bot := m.getAvailableBot()
 		if bot != nil {
 			log.Printf("Assigning bot %s to match %s", bot.name, req.MatchID)
-			if bot.CreateLobby(ctx, req.MatchID, req.Players, req.Radiant, req.Dire, m.commands) {
+			if bot.CreateLobby(ctx, req.MatchID, req.Players, req.Radiant, req.Dire, req.GameMode, m.commands) {
 				return // Success
 			}
 			// CreateLobby failed (bot disconnected), try another bot

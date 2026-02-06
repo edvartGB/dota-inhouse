@@ -1,0 +1,93 @@
+{{define "leaderboard.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard - Dota Inhouse</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Dota Inhouse</h1>
+        <nav>
+            <a href="/" class="nav-link">Queue</a>
+            <a href="/history" class="nav-link">History</a>
+            <a href="/leaderboard" class="nav-link">Leaderboard</a>
+            {{if .User}}
+                <span class="user-info">{{.User.Name}}</span>
+                <a href="/auth/logout" class="btn btn-secondary">Logout</a>
+            {{else}}
+                <a href="/auth/login" class="btn btn-primary">Login with Steam</a>
+            {{end}}
+        </nav>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="leaderboard-header">
+                <h2>Leaderboard</h2>
+                <span class="filter-label">{{.FilterName}}</span>
+            </div>
+
+            <div class="leaderboard-filters">
+                <div class="preset-filters">
+                    <a href="/leaderboard" class="btn btn-secondary {{if eq .FilterName "All Time"}}active{{end}}">All Time</a>
+                    <a href="/leaderboard?preset=week" class="btn btn-secondary {{if eq .FilterName "Last 7 Days"}}active{{end}}">Week</a>
+                    <a href="/leaderboard?preset=month" class="btn btn-secondary {{if eq .FilterName "Last 30 Days"}}active{{end}}">Month</a>
+                    <a href="/leaderboard?preset=year" class="btn btn-secondary {{if eq .FilterName "Last Year"}}active{{end}}">Year</a>
+                </div>
+                <form class="date-filters" method="GET" action="/leaderboard">
+                    <input type="date" name="start" value="{{.StartDate}}" placeholder="Start date">
+                    <input type="date" name="end" value="{{.EndDate}}" placeholder="End date">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                </form>
+            </div>
+
+            {{if .Entries}}
+            <div class="leaderboard-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="rank">#</th>
+                            <th class="player">Player</th>
+                            <th class="stat">W</th>
+                            <th class="stat">L</th>
+                            <th class="stat">Total</th>
+                            <th class="stat">Win %</th>
+                            <th class="stat">Streak</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range $i, $e := .Entries}}
+                        <tr>
+                            <td class="rank">{{add $i 1}}</td>
+                            <td class="player">
+                                {{if $e.AvatarURL}}<img src="{{$e.AvatarURL}}" alt="" class="avatar-small">{{end}}
+                                <span class="player-name">{{$e.Name}}</span>
+                            </td>
+                            <td class="stat wins">{{$e.Wins}}</td>
+                            <td class="stat losses">{{$e.Losses}}</td>
+                            <td class="stat">{{$e.Total}}</td>
+                            <td class="stat">{{printf "%.1f" $e.WinRate}}%</td>
+                            <td class="stat streak {{if gt $e.Streak 0}}win-streak{{else if lt $e.Streak 0}}loss-streak{{end}}">
+                                {{if gt $e.Streak 0}}W{{$e.Streak}}{{else if lt $e.Streak 0}}L{{abs $e.Streak}}{{else}}-{{end}}
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            {{else}}
+            <div class="no-matches">
+                <p>No matches found for this time period.</p>
+            </div>
+            {{end}}
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+{{end}}

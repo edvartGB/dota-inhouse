@@ -229,7 +229,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}
 		// Also render queue panel for users returned to queue
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _ := h.coordinator.GetState()
+			queue, _, _ := h.coordinator.GetState()
 			inQueue := false
 			for _, p := range queue {
 				if p.SteamID == userID {
@@ -259,7 +259,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}
 		// Also render queue panel for users returned to queue
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _ := h.coordinator.GetState()
+			queue, _, _ := h.coordinator.GetState()
 			inQueue := false
 			for _, p := range queue {
 				if p.SteamID == userID {
@@ -306,7 +306,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		// Also render the queue panel so user can join queue again
-		queue, _ := h.coordinator.GetState()
+		queue, _, _ := h.coordinator.GetState()
 		inQueue := false
 		for _, p := range queue {
 			if p.SteamID == userID {
@@ -343,7 +343,7 @@ type DraftData struct {
 
 // renderInitialState renders the current state for a newly connected client.
 func (h *SSEHub) renderInitialState(userID string) string {
-	queue, matches := h.coordinator.GetState()
+	queue, matches, _ := h.coordinator.GetState()
 
 	// Check if user is in queue
 	inQueue := false
@@ -390,7 +390,7 @@ func (h *SSEHub) renderInitialState(userID string) string {
 
 // renderActiveMatches renders the active-matches panel.
 func (h *SSEHub) renderActiveMatches() string {
-	_, matches := h.coordinator.GetState()
+	_, matches, _ := h.coordinator.GetState()
 
 	matchList := make([]*coordinator.Match, 0, len(matches))
 	for _, m := range matches {
@@ -417,6 +417,8 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	// Disable buffering for Cloudflare/nginx proxies
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	// Create client
 	client := &SSEClient{

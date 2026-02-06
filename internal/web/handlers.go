@@ -2,14 +2,26 @@ package web
 
 import (
 	"fmt"
-	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/edvart/dota-inhouse/internal/auth"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 	"github.com/go-chi/chi/v5"
 )
+
+const handlerTimeout = 10 * time.Second
+
+// waitForResponse waits for a response with a timeout.
+func waitForResponse(resp <-chan error) error {
+	select {
+	case err := <-resp:
+		return err
+	case <-time.After(handlerTimeout):
+		return fmt.Errorf("request timed out")
+	}
+}
 
 func (s *Server) handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
@@ -21,14 +33,15 @@ func (s *Server) handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 	resp := make(chan error, 1)
 	s.coordinator.Send(coordinator.JoinQueue{
 		Player: coordinator.Player{
-			SteamID:   user.SteamID,
-			Name:      user.Name,
-			AvatarURL: user.AvatarURL,
+			SteamID:         user.SteamID,
+			Name:            user.Name,
+			AvatarURL:       user.AvatarURL,
+			CaptainPriority: user.CaptainPriority,
 		},
 		Response: resp,
 	})
 
-	if err := <-resp; err != nil {
+	if err := waitForResponse(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -49,7 +62,7 @@ func (s *Server) handleLeaveQueue(w http.ResponseWriter, r *http.Request) {
 		Response: resp,
 	})
 
-	if err := <-resp; err != nil {
+	if err := waitForResponse(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -65,6 +78,10 @@ func (s *Server) handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	matchID := chi.URLParam(r, "matchID")
+	if matchID == "" {
+		http.Error(w, "match ID required", http.StatusBadRequest)
+		return
+	}
 
 	resp := make(chan error, 1)
 	s.coordinator.Send(coordinator.AcceptMatch{
@@ -73,7 +90,7 @@ func (s *Server) handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 		Response: resp,
 	})
 
-	if err := <-resp; err != nil {
+	if err := waitForResponse(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -90,6 +107,10 @@ func (s *Server) handlePickPlayer(w http.ResponseWriter, r *http.Request) {
 
 	matchID := chi.URLParam(r, "matchID")
 	playerID := chi.URLParam(r, "playerID")
+	if matchID == "" || playerID == "" {
+		http.Error(w, "match ID and player ID required", http.StatusBadRequest)
+		return
+	}
 
 	resp := make(chan error, 1)
 	s.coordinator.Send(coordinator.PickPlayer{
@@ -99,7 +120,7 @@ func (s *Server) handlePickPlayer(w http.ResponseWriter, r *http.Request) {
 		Response:  resp,
 	})
 
-	if err := <-resp; err != nil {
+	if err := waitForResponse(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -128,16 +149,16 @@ func (s *Server) handleAddFakePlayers(w http.ResponseWriter, r *http.Request) {
 
 	for i := 1; i <= count; i++ {
 		resp := make(chan error, 1)
-		id := rand.Intn(9999999)
 		s.coordinator.Send(coordinator.JoinQueue{
 			Player: coordinator.Player{
-				SteamID:   fmt.Sprintf("fake_%d", id),
-				Name:      fmt.Sprintf("Player %d", id),
-				AvatarURL: "",
+				SteamID:         fmt.Sprintf("fake_%d", i),
+				Name:            fmt.Sprintf("Player %d", i),
+				AvatarURL:       "",
+				CaptainPriority: 5, // Default priority
 			},
 			Response: resp,
 		})
-		<-resp
+		waitForResponse(resp)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -163,7 +184,7 @@ func (s *Server) handleDevAcceptAll(w http.ResponseWriter, r *http.Request) {
 			MatchID:  matchID,
 			Response: resp,
 		})
-		<-resp
+		waitForResponse(resp)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -179,7 +200,7 @@ func (s *Server) handleDevPick(w http.ResponseWriter, r *http.Request) {
 	playerID := chi.URLParam(r, "playerID")
 
 	// Get the specific match to find the current captain
-	_, matches := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)
@@ -196,7 +217,7 @@ func (s *Server) handleDevPick(w http.ResponseWriter, r *http.Request) {
 		Response:  resp,
 	})
 
-	if err := <-resp; err != nil {
+	if err := waitForResponse(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -214,7 +235,7 @@ func (s *Server) handleDevBotGameStarted(w http.ResponseWriter, r *http.Request)
 	matchID := chi.URLParam(r, "matchID")
 
 	// Verify match exists and is in correct state
-	_, matches := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)
@@ -239,7 +260,7 @@ func (s *Server) handleDevBotGameEnded(w http.ResponseWriter, r *http.Request) {
 	matchID := chi.URLParam(r, "matchID")
 
 	// Verify match exists
-	_, matches := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)
@@ -266,7 +287,7 @@ func (s *Server) handleDevBotLobbyTimeout(w http.ResponseWriter, r *http.Request
 	matchID := chi.URLParam(r, "matchID")
 
 	// Verify match exists and is in waiting for bot state
-	_, matches := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)

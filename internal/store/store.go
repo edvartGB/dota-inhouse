@@ -31,6 +31,7 @@ type Match struct {
 	StartedAt   time.Time
 	EndedAt     *time.Time
 	Winner      *string
+	Duration    *int // Duration in seconds
 }
 
 // MatchPlayer represents a player's participation in a match.
@@ -42,11 +43,22 @@ type MatchPlayer struct {
 	Accepted   bool
 }
 
+// MatchPlayerInfo includes player name for display.
+type MatchPlayerInfo struct {
+	SteamID    string
+	Name       string
+	AvatarURL  string
+	Team       string
+	WasCaptain bool
+}
+
 // Store defines the interface for data persistence.
 type Store interface {
 	// User operations
 	GetUser(ctx context.Context, steamID string) (*User, error)
 	UpsertUser(ctx context.Context, user *User) error
+	ListUsers(ctx context.Context) ([]User, error)
+	UpdateCaptainPriority(ctx context.Context, steamID string, priority int) error
 
 	// Session operations
 	CreateSession(ctx context.Context, session *Session) error
@@ -63,6 +75,34 @@ type Store interface {
 	AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error
 	GetMatchPlayers(ctx context.Context, matchID string) ([]MatchPlayer, error)
 
+	// Match history
+	ListMatches(ctx context.Context, limit int) ([]Match, error)
+	ListMatchesWithPlayers(ctx context.Context, limit int) ([]MatchWithPlayers, error)
+
+	// Leaderboard
+	GetLeaderboard(ctx context.Context, startDate, endDate *time.Time) ([]LeaderboardEntry, error)
+
 	// Close the store
 	Close() error
+}
+
+// MatchWithPlayers combines a match with its player data for display.
+type MatchWithPlayers struct {
+	Match
+	Radiant        []MatchPlayerInfo
+	Dire           []MatchPlayerInfo
+	RadiantCaptain *MatchPlayerInfo
+	DireCaptain    *MatchPlayerInfo
+}
+
+// LeaderboardEntry represents a player's stats for the leaderboard.
+type LeaderboardEntry struct {
+	SteamID   string
+	Name      string
+	AvatarURL string
+	Wins      int
+	Losses    int
+	Total     int
+	WinRate   float64
+	Streak    int // Positive = win streak, negative = loss streak
 }

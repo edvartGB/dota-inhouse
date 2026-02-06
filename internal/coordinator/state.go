@@ -4,9 +4,10 @@ import "time"
 
 // Player represents a user in the system.
 type Player struct {
-	SteamID   string `json:"steamId"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"avatarUrl"`
+	SteamID         string `json:"steamId"`
+	Name            string `json:"name"`
+	AvatarURL       string `json:"avatarUrl"`
+	CaptainPriority int    `json:"captainPriority"`
 }
 
 // MatchState represents the current phase of a match.
@@ -50,17 +51,40 @@ type Match struct {
 	DotaMatchID      uint64
 }
 
+// LobbySettings holds configurable lobby settings that admins can change at runtime.
+type LobbySettings struct {
+	GameMode string `json:"gameMode"` // "cm", "ap", "cd", "rd", "ar"
+}
+
+// DefaultLobbySettings returns the default lobby settings.
+func DefaultLobbySettings() LobbySettings {
+	return LobbySettings{
+		GameMode: "cm",
+	}
+}
+
+// ValidGameModes are the allowed game mode values.
+var ValidGameModes = map[string]string{
+	"ap": "All Pick",
+	"cm": "Captain's Mode",
+	"cd": "Captain's Draft",
+	"rd": "Random Draft",
+	"ar": "All Random",
+}
+
 // State holds all mutable state owned by the coordinator.
 type State struct {
-	Queue   []Player          // Players waiting for a match
-	Matches map[string]*Match // Active matches keyed by match ID
+	Queue         []Player          // Players waiting for a match
+	Matches       map[string]*Match // Active matches keyed by match ID
+	LobbySettings LobbySettings     // Configurable lobby settings
 }
 
 // NewState creates an empty initial state.
 func NewState() *State {
 	return &State{
-		Queue:   []Player{},
-		Matches: make(map[string]*Match),
+		Queue:         []Player{},
+		Matches:       make(map[string]*Match),
+		LobbySettings: DefaultLobbySettings(),
 	}
 }
 

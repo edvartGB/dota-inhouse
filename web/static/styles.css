@@ -444,3 +444,475 @@ main {
     opacity: 0.7;
     cursor: wait;
 }
+
+/* Navigation Links */
+.nav-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.nav-link:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Match History Page */
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.history-header h2 {
+    font-size: 1.5rem;
+}
+
+.match-history {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.history-match {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+    border-left: 4px solid var(--border-color);
+}
+
+.history-match.winner-radiant {
+    border-left-color: var(--accent-radiant);
+}
+
+.history-match.winner-dire {
+    border-left-color: var(--accent-dire);
+}
+
+.match-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.match-date {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.match-winner {
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.match-winner.radiant {
+    background: rgba(146, 165, 37, 0.2);
+    color: var(--accent-radiant);
+}
+
+.match-winner.dire {
+    background: rgba(194, 60, 42, 0.2);
+    color: var(--accent-dire);
+}
+
+.match-winner.unknown {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.match-duration {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.dota-match-id {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-left: auto;
+}
+
+.history-match .match-teams {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.history-match .team {
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.history-match .team h4 {
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.history-match .team.radiant h4 {
+    color: var(--accent-radiant);
+}
+
+.history-match .team.dire h4 {
+    color: var(--accent-dire);
+}
+
+.history-match .player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.history-match .player {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.history-match .player.captain {
+    border: 1px solid var(--accent-primary);
+}
+
+.avatar-small {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+}
+
+.player-name {
+    flex: 1;
+}
+
+.captain-badge {
+    background: var(--accent-primary);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+}
+
+.history-match .vs {
+    color: var(--text-secondary);
+    font-weight: bold;
+    font-size: 1.2rem;
+    align-self: center;
+}
+
+.no-matches {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
+/* Leaderboard Page */
+.leaderboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.leaderboard-header h2 {
+    font-size: 1.5rem;
+}
+
+.filter-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.leaderboard-filters {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.preset-filters {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.preset-filters .btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.date-filters {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.date-filters input[type="date"] {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.leaderboard-table {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.leaderboard-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+}
+
+.leaderboard-table th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+}
+
+.leaderboard-table tr:not(:last-child) td {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.leaderboard-table .rank {
+    width: 50px;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.leaderboard-table .player {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.leaderboard-table .stat {
+    text-align: center;
+    width: 80px;
+}
+
+.leaderboard-table .wins {
+    color: var(--accent-radiant);
+}
+
+.leaderboard-table .losses {
+    color: var(--accent-dire);
+}
+
+.leaderboard-table .streak.win-streak {
+    color: var(--accent-radiant);
+    font-weight: bold;
+}
+
+.leaderboard-table .streak.loss-streak {
+    color: var(--accent-dire);
+    font-weight: bold;
+}
+
+/* Top 3 highlighting */
+.leaderboard-table tbody tr:nth-child(1) .rank {
+    color: gold;
+    font-weight: bold;
+}
+
+.leaderboard-table tbody tr:nth-child(2) .rank {
+    color: silver;
+    font-weight: bold;
+}
+
+.leaderboard-table tbody tr:nth-child(3) .rank {
+    color: #cd7f32;
+    font-weight: bold;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    html, body {
+        overflow-x: hidden;
+        width: 100%;
+    }
+
+    header {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+
+    header h1 {
+        font-size: 1.25rem;
+    }
+
+    header nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .nav-link {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.9rem;
+    }
+
+    .user-info {
+        display: none;
+    }
+
+    main {
+        padding: 0.75rem;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 100%;
+        padding: 0;
+    }
+
+    .main-layout {
+        display: flex !important;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .sidebar {
+        width: 100%;
+    }
+
+    .queue-panel,
+    .matches-panel {
+        padding: 1rem;
+    }
+
+    .draft-layout {
+        display: flex !important;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .draft-layout .available {
+        order: -1;
+    }
+
+    .draft-panel {
+        padding: 1rem;
+    }
+
+    .history-match .match-teams {
+        display: flex !important;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .history-match .vs {
+        text-align: center;
+        padding: 0.25rem 0;
+    }
+
+    .history-match {
+        padding: 1rem;
+    }
+
+    .match-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .dota-match-id {
+        margin-left: 0;
+    }
+
+    .dialog {
+        margin: 0.75rem;
+        max-width: calc(100% - 1.5rem);
+        padding: 1.25rem;
+    }
+
+    .welcome {
+        padding: 2rem 1rem;
+    }
+
+    /* Leaderboard mobile */
+    .leaderboard-filters {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .preset-filters {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .date-filters {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .leaderboard-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .leaderboard-table table {
+        min-width: 450px;
+    }
+
+    .leaderboard-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+
+    .history-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+
+    /* Bigger touch targets */
+    .btn {
+        padding: 0.7rem 1rem;
+        font-size: 0.95rem;
+    }
+
+    .player.pickable {
+        padding: 0.75rem;
+    }
+
+    /* Dev panel mobile */
+    .dev-panel {
+        padding: 0.75rem;
+    }
+
+    .dev-buttons {
+        flex-direction: column;
+    }
+
+    .dev-match-tools {
+        flex-direction: column;
+        width: 100%;
+    }
+}

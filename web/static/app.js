@@ -41,14 +41,15 @@ function connectSSE() {
                 if (targetId === 'queue') {
                     updateQueueButtons();
                 }
-            } else {
-                // If no target exists, append to body (for dialogs)
+            } else if (el.classList.contains('dialog-overlay')) {
+                // Only append dialog overlays to body, not other elements like panels
                 document.body.appendChild(el);
                 el.removeAttribute('hx-swap-oob');
                 if (typeof htmx !== 'undefined') {
                     htmx.process(el);
                 }
             }
+            // Silently ignore elements that don't have a target (e.g., queue panel on history page)
         });
     };
 
