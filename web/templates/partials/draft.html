@@ -1,0 +1,55 @@
+{{define "draft"}}
+<div id="match-area" hx-swap-oob="true">
+<div id="draft" class="draft-panel">
+    <h3>Player Draft</h3>
+
+    <div class="draft-layout">
+        <div class="team radiant">
+            <h4>Radiant</h4>
+            <p class="captain">Captain: {{index .Captains 0 | getPlayerName}}</p>
+            <ul class="player-list">
+                {{range .Radiant}}
+                    <li class="player">{{.Name}}</li>
+                {{end}}
+            </ul>
+            {{if and (eq .CurrentPicker 0) (gt (len .AvailablePlayers) 0)}}
+                <span class="picking-indicator">Picking...</span>
+            {{end}}
+        </div>
+
+        <div class="available">
+            <h4>Available Players</h4>
+            <ul class="player-list">
+                {{range .AvailablePlayers}}
+                    <li class="player pickable"
+                        {{if $.DevMode}}
+                        hx-post="/dev/pick/{{$.MatchID}}/{{.SteamID}}"
+                        {{else}}
+                        hx-post="/match/{{$.MatchID}}/pick/{{.SteamID}}"
+                        {{end}}
+                        hx-swap="none">
+                        {{.Name}}
+                    </li>
+                {{end}}
+                {{if eq (len .AvailablePlayers) 0}}
+                    <li class="player empty">Draft complete</li>
+                {{end}}
+            </ul>
+        </div>
+
+        <div class="team dire">
+            <h4>Dire</h4>
+            <p class="captain">Captain: {{index .Captains 1 | getPlayerName}}</p>
+            <ul class="player-list">
+                {{range .Dire}}
+                    <li class="player">{{.Name}}</li>
+                {{end}}
+            </ul>
+            {{if and (eq .CurrentPicker 1) (gt (len .AvailablePlayers) 0)}}
+                <span class="picking-indicator">Picking...</span>
+            {{end}}
+        </div>
+    </div>
+</div>
+</div>
+{{end}}

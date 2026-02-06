@@ -1,0 +1,144 @@
+{{define "index.html"}}
+{{template "base" .}}
+{{end}}
+
+{{define "content"}}
+<div class="container">
+    {{if .User}}
+        <div class="main-layout">
+            <div class="sidebar">
+                {{template "queue" .}}
+                {{template "active-matches" .}}
+            </div>
+
+            <div id="match-area">
+                {{if .Match}}
+                    {{if eq .Match.State 0}}
+                        <div id="accept-dialog" class="dialog-overlay">
+                            <div class="dialog">
+                                <h3>Match Found!</h3>
+                                <!-- <p>A match has been found. Accept to join the draft.</p> -->
+
+                                <div id="accept-status" class="accept-status">
+                                    <p>{{len .Match.AcceptedPlayers}}/10 players accepted</p>
+                                    <div class="progress-bar">
+                                        <div class="progress" style="width: {{percent (len .Match.AcceptedPlayers) 10}}%"></div>
+                                    </div>
+                                </div>
+
+                                <button hx-post="/match/{{.Match.ID}}/accept"
+                                        hx-swap="none"
+                                        class="btn btn-primary btn-large">
+                                    Accept Match
+                                </button>
+                            </div>
+                        </div>
+                    {{else if eq .Match.State 1}}
+                        {{template "draft-page" .}}
+                    {{else if eq .Match.State 2}}
+                        <div class="match-status">
+                            <h3>Waiting for Dota 2 lobby...</h3>
+                            <div class="spinner"></div>
+                            <p>The bot is creating your Dota 2 lobby. You will receive an invite shortly.</p>
+                        </div>
+                    {{else if eq .Match.State 3}}
+                        <div class="match-status">
+                            <h3>Match in Progress</h3>
+                            <p>Dota 2 Match ID: {{.Match.DotaMatchID}}</p>
+                        </div>
+                    {{end}}
+                {{end}}
+            </div>
+        </div>
+
+        {{if .DevMode}}
+        <div class="dev-panel">
+            <h4>Dev Tools</h4>
+            <div class="dev-buttons">
+                <button hx-post="/dev/add-fake-players" hx-swap="none" class="btn btn-secondary">
+                    Add 9 Fake Players
+                </button>
+                {{if .Match}}
+                <div class="dev-match-tools">
+                    <p>Match: {{slice .Match.ID 0 8}}...</p>
+                    {{if eq .Match.State 2}}
+                    <button hx-post="/dev/bot/game-started/{{.Match.ID}}" hx-swap="none" class="btn btn-secondary">
+                        Simulate Game Started
+                    </button>
+                    <button hx-post="/dev/bot/lobby-timeout/{{.Match.ID}}?joined=" hx-swap="none" class="btn btn-danger">
+                        Simulate Lobby Timeout (all failed)
+                    </button>
+                    {{end}}
+                    {{if eq .Match.State 3}}
+                    <button hx-post="/dev/bot/game-ended/{{.Match.ID}}" hx-swap="none" class="btn btn-secondary">
+                        Simulate Game Ended
+                    </button>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    {{else}}
+        <div class="welcome">
+            <h2>Welcome to Dota Inhouse</h2>
+            <p>Sign in with Steam to join the queue and play competitive matches.</p>
+            <a href="/auth/login" class="btn btn-primary btn-large">Login with Steam</a>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{define "draft-page"}}
+<div id="draft" class="draft-panel">
+    <h3>Player Draft</h3>
+
+    <div class="draft-layout">
+        <div class="team radiant">
+            <h4>Radiant</h4>
+            <p class="captain">Captain: {{(index .Match.Captains 0).Name}}</p>
+            <ul class="player-list">
+                {{range .Match.Radiant}}
+                    <li class="player">{{.Name}}</li>
+                {{end}}
+            </ul>
+            {{if and (eq .Match.CurrentPicker 0) (gt (len .Match.AvailablePlayers) 0)}}
+                <span class="picking-indicator">Picking...</span>
+            {{end}}
+        </div>
+
+        <div class="available">
+            <h4>Available Players</h4>
+            <ul class="player-list">
+                {{range .Match.AvailablePlayers}}
+                    <li class="player pickable"
+                        {{if $.DevMode}}
+                        hx-post="/dev/pick/{{$.Match.ID}}/{{.SteamID}}"
+                        {{else}}
+                        hx-post="/match/{{$.Match.ID}}/pick/{{.SteamID}}"
+                        {{end}}
+                        hx-swap="none">
+                        {{.Name}}
+                    </li>
+                {{end}}
+                {{if eq (len .Match.AvailablePlayers) 0}}
+                    <li class="player empty">Draft complete</li>
+                {{end}}
+            </ul>
+        </div>
+
+        <div class="team dire">
+            <h4>Dire</h4>
+            <p class="captain">Captain: {{(index .Match.Captains 1).Name}}</p>
+            <ul class="player-list">
+                {{range .Match.Dire}}
+                    <li class="player">{{.Name}}</li>
+                {{end}}
+            </ul>
+            {{if and (eq .Match.CurrentPicker 1) (gt (len .Match.AvailablePlayers) 0)}}
+                <span class="picking-indicator">Picking...</span>
+            {{end}}
+        </div>
+    </div>
+</div>
+{{end}}

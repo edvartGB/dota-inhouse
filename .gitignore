@@ -1,0 +1,7 @@
+.claude
+set_env.sh
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib

@@ -1,0 +1,446 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-primary: #111;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #222;
+    --text-primary: #fff;
+    --text-secondary: #aaa;
+    --accent-primary: #4a9eff;
+    --accent-radiant: #92a525;
+    --accent-dire: #c23c2a;
+    --accent-danger: #dc3545;
+    --border-color: #333;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+header h1 {
+    font-size: 1.5rem;
+}
+
+header nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.user-info {
+    color: var(--text-secondary);
+}
+
+main {
+    padding: 2rem;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    text-decoration: none;
+    display: inline-block;
+    transition: opacity 0.2s;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn-primary {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-danger {
+    background: var(--accent-danger);
+    color: white;
+}
+
+.btn-large {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}
+
+/* Layout */
+.main-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 2rem;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Queue Panel */
+.queue-panel {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.queue-panel h3 {
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+}
+
+.player-list {
+    list-style: none;
+}
+
+.player-list .player {
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 0.25rem;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.player-list .player.empty {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.player-list .player .avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+}
+
+.queue-actions {
+    margin-top: 1rem;
+}
+
+.queue-actions .btn {
+    width: 100%;
+}
+
+/* Matches Panel */
+.matches-panel {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.matches-panel h3 {
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+}
+
+.no-matches {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.match-list {
+    list-style: none;
+}
+
+.match-item {
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--border-color);
+}
+
+.match-item.state-accepting {
+    border-left-color: #f0ad4e;
+}
+
+.match-item.state-drafting {
+    border-left-color: var(--accent-primary);
+}
+
+.match-item.state-waiting {
+    border-left-color: #5bc0de;
+}
+
+.match-item.state-ingame {
+    border-left-color: #5cb85c;
+}
+
+.match-status-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    background: var(--bg-primary);
+}
+
+.match-teams {
+    font-size: 0.85rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.match-teams .team-radiant {
+    color: var(--accent-radiant);
+}
+
+.match-teams .team-dire {
+    color: var(--accent-dire);
+}
+
+.match-teams .vs {
+    color: var(--text-secondary);
+    margin: 0 0.25rem;
+}
+
+/* Draft Panel */
+.draft-panel {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.draft-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.team {
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.team.radiant {
+    border-left: 4px solid var(--accent-radiant);
+}
+
+.team.dire {
+    border-left: 4px solid var(--accent-dire);
+}
+
+.team h4 {
+    margin-bottom: 0.5rem;
+}
+
+.team .captain {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.available {
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.available h4 {
+    margin-bottom: 0.5rem;
+}
+
+.player.pickable {
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.player.pickable:hover {
+    background: var(--accent-primary);
+}
+
+.picking-indicator {
+    display: block;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--accent-primary);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+/* Dialog */
+.dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.dialog {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 400px;
+    text-align: center;
+}
+
+.dialog h3 {
+    margin-bottom: 1rem;
+}
+
+.dialog p {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.accept-status {
+    margin-bottom: 1rem;
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.progress {
+    height: 100%;
+    background: var(--accent-primary);
+    transition: width 0.3s;
+}
+
+/* Match Status */
+.match-status {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+}
+
+.match-status h3 {
+    margin-bottom: 1rem;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--bg-tertiary);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 1rem auto;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Notifications */
+.notification {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.notification.success {
+    background: rgba(40, 167, 69, 0.2);
+    border: 1px solid #28a745;
+}
+
+.notification.error {
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid var(--accent-danger);
+}
+
+/* Welcome */
+.welcome {
+    text-align: center;
+    padding: 4rem 2rem;
+}
+
+.welcome h2 {
+    margin-bottom: 1rem;
+}
+
+.welcome p {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+}
+
+/* Dev Panel */
+.dev-panel {
+    margin-top: 2rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px dashed var(--accent-primary);
+}
+
+.dev-panel h4 {
+    margin-bottom: 0.5rem;
+    color: var(--accent-primary);
+}
+
+.dev-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.dev-match-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.dev-match-tools p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* HTMX Loading States */
+.btn.htmx-request {
+    opacity: 0.7;
+    cursor: wait;
+}

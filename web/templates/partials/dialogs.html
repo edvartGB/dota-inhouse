@@ -1,0 +1,78 @@
+{{define "accept-dialog"}}
+<div id="match-area" hx-swap-oob="true">
+    <div id="accept-dialog" class="dialog-overlay">
+        <div class="dialog">
+            <h3>Match Found!</h3>
+            <p>A match has been found. Accept to join the draft.</p>
+
+            <div id="accept-status">
+                {{template "accept-status" .}}
+            </div>
+
+            <button hx-post="/match/{{.MatchID}}/accept"
+                    hx-swap="none"
+                    class="btn btn-primary btn-large">
+                Accept Match
+            </button>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "accept-status"}}
+<div id="accept-status" class="accept-status" hx-swap-oob="true">
+    <p>{{.Count}}/{{.Total}} players accepted</p>
+    <div class="progress-bar">
+        <div class="progress" style="width: {{percent .Count .Total}}%"></div>
+    </div>
+</div>
+{{end}}
+
+{{define "match-cancelled"}}
+<div id="match-area" hx-swap-oob="true">
+    <div class="notification error">
+        <h3>Match Cancelled</h3>
+        <p>Not all players accepted in time.</p>
+    </div>
+</div>
+{{end}}
+
+{{define "waiting-for-bot"}}
+<div id="match-area" hx-swap-oob="true">
+    <div class="match-status">
+        <h3>{{.Message}}</h3>
+        <div class="spinner"></div>
+        <p>The bot is creating your Dota 2 lobby. You will receive an invite shortly.</p>
+    </div>
+</div>
+{{end}}
+
+{{define "match-completed"}}
+<div id="match-area" hx-swap-oob="true">
+    <div class="notification success">
+        <h3>Match Completed!</h3>
+        <p>Dota 2 Match ID: {{.DotaMatchID}}</p>
+    </div>
+</div>
+{{end}}
+
+{{define "draft-cancelled"}}
+<div id="match-area" hx-swap-oob="true">
+    <div class="notification error">
+        <h3>Draft Cancelled</h3>
+        <p>Captain {{.FailedCaptain.Name}} failed to pick in time.</p>
+    </div>
+</div>
+{{end}}
+
+{{define "lobby-cancelled"}}
+<div id="match-area" hx-swap-oob="true">
+    <div class="notification error">
+        <h3>Lobby Cancelled</h3>
+        <p>Not all players joined the lobby in time.</p>
+        {{if gt (len .FailedPlayers) 0}}
+        <p class="failed-players">Failed to join: {{range $i, $p := .FailedPlayers}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</p>
+        {{end}}
+    </div>
+</div>
+{{end}}
