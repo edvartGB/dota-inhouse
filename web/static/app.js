@@ -7,7 +7,11 @@ let audioUnlocked = false;
 function unlockAudio() {
     if (audioUnlocked) return;
     audioUnlocked = true;
-    console.log("Audio unlocked");
+
+    // Request notification permission on first interaction
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
 }
 document.addEventListener('click', unlockAudio, { once: true });
 document.addEventListener('keydown', unlockAudio, { once: true });
@@ -17,11 +21,11 @@ function playNotificationSound() {
     try {
         const audio = new Audio('/static/faceit_trumpet.mp3');
         audio.volume = 0.7;
-        audio.play().catch(e =>
-            console.warn('Could not play notification sound:', e)
-        );
+        audio.play().catch(e => {
+            console.warn('Could not play notification sound (may need user interaction first):', e);
+        });
     } catch (e) {
-        console.warn('Could not play notification sound:', e);
+        console.warn('Could not create notification sound:', e);
     }
 }
 
@@ -48,25 +52,7 @@ function connectSSE() {
             const targetId = el.id;
             const target = document.getElementById(targetId);
 
-            if (target) {
-                target.replaceWith(el);
-                el.removeAttribute('hx-swap-oob');
-
-                if (typeof htmx !== 'undefined') {
-                    htmx.process(el);
-                }
-
-            }
-            else if (el.classList.contains('dialog-overlay') || el.querySelector('.dialog-overlay')) {
-                document.body.appendChild(el);
-                el.removeAttribute('hx-swap-oob');
-
-                if (typeof htmx !== 'undefined') {
-                    htmx.process(el);
-                }
-
-                console.log("Dialog overlay received");
-
+            if (el.dataset.playNotification === 'true') {
                 playNotificationSound();
 
                 if ('Notification' in window && Notification.permission === 'granted') {
@@ -75,6 +61,17 @@ function connectSSE() {
                         icon: '/static/dota-icon.png'
                     });
                 }
+            }
+
+            if (target) {
+                target.replaceWith(el);
+            } else {
+                document.body.appendChild(el);
+            }
+            el.removeAttribute('hx-swap-oob');
+
+            if (typeof htmx !== 'undefined') {
+                htmx.process(el);
             }
         });
     };
@@ -93,14 +90,6 @@ function connectSSE() {
 // Connect SSE when page loads
 document.addEventListener('DOMContentLoaded', () => {
     connectSSE();
-
-    if ('Notification' in window) {
-        console.log("Notification permission:", Notification.permission);
-    }
-
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-    }
 });
 
 // Cleanup on page unload
@@ -109,4 +98,3 @@ window.addEventListener('beforeunload', () => {
         eventSource.close();
     }
 });
-

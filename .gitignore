@@ -5,3 +5,5 @@ set_env.sh
 *.dll
 *.so
 *.dylib
+
+data/inhouse.log

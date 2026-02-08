@@ -405,6 +405,38 @@ main {
     margin-bottom: 2rem;
 }
 
+/* Debug Panel */
+.debug-panel {
+    margin-top: 2rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--accent-secondary);
+}
+
+.debug-panel h4 {
+    margin-bottom: 0.75rem;
+    color: var(--accent-secondary);
+}
+
+.debug-info {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.debug-info p {
+    margin: 0.25rem 0;
+}
+
+.debug-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
 /* Dev Panel */
 .dev-panel {
     margin-top: 2rem;
