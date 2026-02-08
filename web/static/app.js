@@ -1,32 +1,53 @@
 let eventSource = null;
 let reconnectTimeout = null;
 let audioUnlocked = false;
+let reconnectAttempts = 0;
 
-// Browsers block audio until a user gesture has occurred.
-// Mark as unlocked on any interaction so playNotificationSound can fire.
+document.addEventListener('DOMContentLoaded', () => {
+    connectSSE();
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(() => console.log('Service worker registered'));
+    }
+});
+
+
+const notificationAudio = new Audio('/static/faceit_trumpet.mp3');
+notificationAudio.load();
+notificationAudio.volume = 0.7;
+notificationAudio.preload = 'auto';
+
+
 function unlockAudio() {
     if (audioUnlocked) return;
-    audioUnlocked = true;
 
-    // Request notification permission on first interaction
+    notificationAudio.play()
+        .then(() => {
+            notificationAudio.pause();
+            notificationAudio.currentTime = 0;
+            audioUnlocked = true;
+            console.log("Audio unlocked");
+        })
+        .catch(() => { });
+
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
     }
 }
+
 document.addEventListener('click', unlockAudio, { once: true });
 document.addEventListener('keydown', unlockAudio, { once: true });
 document.addEventListener('touchstart', unlockAudio, { once: true });
 
 function playNotificationSound() {
-    try {
-        const audio = new Audio('/static/faceit_trumpet.mp3');
-        audio.volume = 0.7;
-        audio.play().catch(e => {
-            console.warn('Could not play notification sound (may need user interaction first):', e);
-        });
-    } catch (e) {
-        console.warn('Could not create notification sound:', e);
-    }
+    if (!audioUnlocked) return;
+
+    notificationAudio.currentTime = 0;
+    console.log("Playing notification sound");
+    notificationAudio.play().catch(e => {
+        console.warn("Audio play failed:", e);
+    });
 }
 
 function connectSSE() {
@@ -38,11 +59,13 @@ function connectSSE() {
 
     eventSource.onopen = () => {
         console.log('SSE connected');
+        reconnectAttempts = 0;
         if (reconnectTimeout) {
             clearTimeout(reconnectTimeout);
             reconnectTimeout = null;
         }
     };
+
 
     eventSource.onmessage = (event) => {
         const container = document.createElement('div');
@@ -54,13 +77,7 @@ function connectSSE() {
 
             if (el.dataset.playNotification === 'true') {
                 playNotificationSound();
-
-                if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification('Match Found!', {
-                        body: 'Click to accept your match.',
-                        icon: '/static/dota-icon.png'
-                    });
-                }
+                notifyMatchFound();
             }
 
             if (target) {
@@ -80,10 +97,14 @@ function connectSSE() {
         console.error('SSE error:', err);
         eventSource.close();
 
+        reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
+
+        console.log(`SSE disconnected. Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`);
+
         reconnectTimeout = setTimeout(() => {
-            console.log('SSE connection lost, reloading page...');
-            window.location.reload();
-        }, 2000);
+            connectSSE();
+        }, delay);
     };
 }
 
@@ -98,3 +119,14 @@ window.addEventListener('beforeunload', () => {
         eventSource.close();
     }
 });
+
+
+function notifyMatchFound() {
+    if (!('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker.ready.then(reg => {
+        if (reg.active) {
+            reg.active.postMessage({ type: 'MATCH_FOUND' });
+        }
+    });
+}

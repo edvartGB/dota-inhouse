@@ -65,6 +65,17 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
+	r.Get("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		data, err := fs.ReadFile(staticFS, "sw.js")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Write(data)
+	})
+
 	r.Get("/auth/login", s.steamAuth.LoginHandler)
 	r.Get("/auth/callback", s.steamAuth.CallbackHandler)
 	r.Get("/auth/logout", s.steamAuth.LogoutHandler)
