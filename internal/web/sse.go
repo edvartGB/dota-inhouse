@@ -119,21 +119,21 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		data := struct {
-			MatchID       string
-			Players       []coordinator.Player
-			Deadline      string
-			Count         int
-			Total         int
-			UserID        string
-			UserAccepted  bool
+			MatchID      string
+			Players      []coordinator.Player
+			Deadline     string
+			Count        int
+			Total        int
+			UserID       string
+			UserAccepted bool
 		}{
-			MatchID:       e.MatchID,
-			Players:       e.Players,
-			Deadline:      e.Deadline.Format("2006-01-02T15:04:05Z"),
-			Count:         0,
-			Total:         coordinator.MaxPlayers,
-			UserID:        userID,
-			UserAccepted:  false,
+			MatchID:      e.MatchID,
+			Players:      e.Players,
+			Deadline:     e.Deadline.Format("2006-01-02T15:04:05Z"),
+			Count:        0,
+			Total:        coordinator.MaxPlayers,
+			UserID:       userID,
+			UserAccepted: false,
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "accept-dialog", data); err != nil {
 			log.Printf("Failed to render accept dialog: %v", err)
@@ -457,7 +457,7 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 	h.clients[client] = true
 	h.mu.Unlock()
 
-	log.Printf("SSE client connected: %s (user: %s)", client.ID, userID)
+	//log.Printf("SSE client connected: %s (user: %s)", client.ID, userID)
 
 	// Ensure cleanup on disconnect
 	defer func() {
@@ -465,7 +465,7 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 		delete(h.clients, client)
 		h.mu.Unlock()
 		close(client.Channel)
-		log.Printf("SSE client disconnected: %s", client.ID)
+		//log.Printf("SSE client disconnected: %s", client.ID)
 	}()
 
 	flusher, ok := w.(http.Flusher)
