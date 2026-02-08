@@ -78,7 +78,7 @@
 {{end}}
 
 {{define "queue-sse"}}
-<div id="queue" class="queue-panel" hx-swap-oob="true" data-max-players="10" data-in-queue="{{if .InQueue}}true{{else}}false{{end}}">
+<div id="queue" class="queue-panel" hx-swap-oob="true" data-max-players="10">
     <h3>Queue ({{len .Queue}}/10)</h3>
     <ul class="player-list">
         {{range .Queue}}

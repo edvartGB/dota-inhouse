@@ -146,7 +146,7 @@ func (b *Bot) IsAvailable() bool {
 	return b.loggedIn && !b.busy
 }
 
-const LobbyJoinTimeout = 1 * time.Minute
+const LobbyJoinTimeout = 5 * time.Minute
 
 func gameModeFromString(mode string) protocol.DOTA_GameMode {
 	switch mode {
@@ -202,11 +202,12 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 	dotaGameMode := gameModeFromString(gameMode)
 	log.Printf("[%s] Creating lobby with game mode: %s (%v)", b.name, gameMode, dotaGameMode)
 	b.dota2Client.LeaveCreateLobby(b.ctx, &protocol.CMsgPracticeLobbySetDetails{
-		AllowCheats: proto.Bool(false),
-		GameName:    proto.String(lobbyName),
-		GameMode:    proto.Uint32(uint32(dotaGameMode)),
-		Visibility:  protocol.DOTALobbyVisibility_DOTALobbyVisibility_Public.Enum(),
-		DotaTvDelay: protocol.LobbyDotaTVDelay_LobbyDotaTV_10.Enum(),
+		AllowCheats:     proto.Bool(false),
+		AllowSpectating: proto.Bool(true),
+		GameName:        proto.String(lobbyName),
+		GameMode:        proto.Uint32(uint32(dotaGameMode)),
+		Visibility:      protocol.DOTALobbyVisibility_DOTALobbyVisibility_Public.Enum(),
+		DotaTvDelay:     protocol.LobbyDotaTVDelay_LobbyDotaTV_10.Enum(),
 	}, true)
 
 	log.Printf("[%s] Moving bot to unassigned pool", b.name)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +23,18 @@ import (
 )
 
 func main() {
+	// Log to both stdout and a file for searchability
+	logPath := getEnv("LOG_PATH", "./data/inhouse.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		log.Fatalf("Failed to create log directory: %v", err)
+	}
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	defer logFile.Close()
+	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+
 	// Configuration from environment
 	port := getEnv("PORT", "8080")
 	baseURL := getEnv("BASE_URL", "http://localhost:"+port)

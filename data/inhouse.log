@@ -1,0 +1,34 @@
+2026/02/08 22:15:03 MaxPlayers set to 10
+2026/02/08 22:15:03 Dota API client initialized
+2026/02/08 22:15:03 SSE hub started
+2026/02/08 22:15:03 Coordinator started
+2026/02/08 22:15:03 Match recorder started
+2026/02/08 22:15:03 Bot initialized: DNDLBot1
+2026/02/08 22:15:03 [DNDLBot1] Connection attempt 1
+2026/02/08 22:15:03 [DNDLBot2] Connection attempt 1
+2026/02/08 22:15:03 Bot initialized: DNDLBot2
+2026/02/08 22:15:03 Bot initialized: DNDLBot3
+2026/02/08 22:15:03 Bot manager started
+2026/02/08 22:15:03 [DNDLBot3] Connection attempt 1
+2026/02/08 22:15:03 [DNDLBot1] Connection established, listening to events
+2026/02/08 22:15:03 [DNDLBot1] Listening to steam client events
+2026/02/08 22:15:03 [DNDLBot1] Connected, logging on…
+2026/02/08 22:15:03 [DNDLBot2] Connection established, listening to events
+2026/02/08 22:15:03 [DNDLBot2] Listening to steam client events
+2026/02/08 22:15:03 [DNDLBot2] Connected, logging on…
+2026/02/08 22:15:03 [DNDLBot3] Connection established, listening to events
+2026/02/08 22:15:03 [DNDLBot3] Listening to steam client events
+2026/02/08 22:15:03 [DNDLBot3] Connected, logging on…
+2026/02/08 22:15:03 [DNDLBot1] Logged on successfully!
+2026/02/08 22:15:03 [DNDLBot2] Logged on successfully!
+2026/02/08 22:15:03 [DNDLBot3] Logged on successfully!
+2026/02/08 22:15:11 SSE client connected: 0x14000001b80 (user: 76561198014367687)
+2026/02/08 22:15:13 Player edvart joined queue (1/10)
+2026/02/08 22:15:21 SSE client disconnected: 0x14000001b80
+2026/02/08 22:15:21 SSE client connected: 0x14000136780 (user: 76561198014367687)
+2026/02/08 22:15:23 SSE client connected: 0x14000730640 (user: 76561199041750793)
+2026/02/08 22:15:24 Player CHILD. joined queue (2/10)
+2026/02/08 22:15:32 SSE client connected: 0x14000aac640 (user: 76561198038160919)
+2026/02/08 22:15:36 Player Corvus Corax joined queue (3/10)
+2026/02/08 22:15:41 SSE client connected: 0x14000137040 (user: 76561197963289811)
+2026/02/08 22:15:43 Player pingEling joined queue (4/10)

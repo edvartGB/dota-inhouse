@@ -17,7 +17,6 @@ var MaxPlayers = 10
 const (
 	MatchAcceptTimeoutDur = 30 * time.Second
 	DraftPickTimeoutDur   = 60 * time.Second
-	LobbyJoinTimeoutDur   = 5 * time.Minute
 )
 
 // Coordinator owns all mutable state and processes commands sequentially.

@@ -1,31 +1,19 @@
-// SSE connection for real-time updates
 let eventSource = null;
 let reconnectTimeout = null;
-let previousQueueSize = 0;
 let audioUnlocked = false;
 
-// Unlock audio after first user interaction (required by browsers)
-document.addEventListener('click', () => {
-    if (!audioUnlocked) {
-        const audio = new Audio('/static/faceit_trumpet.mp3');
-        audio.play()
-            .then(() => {
-                audio.pause();
-                audio.currentTime = 0;
-                audioUnlocked = true;
-                console.log("Audio unlocked");
-            })
-            .catch(() => {});
-    }
-}, { once: true });
+// Browsers block audio until a user gesture has occurred.
+// Mark as unlocked on any interaction so playNotificationSound can fire.
+function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    console.log("Audio unlocked");
+}
+document.addEventListener('click', unlockAudio, { once: true });
+document.addEventListener('keydown', unlockAudio, { once: true });
+document.addEventListener('touchstart', unlockAudio, { once: true });
 
-// Play notification sound
 function playNotificationSound() {
-    if (!audioUnlocked) {
-        console.warn("Audio not unlocked yet");
-        return;
-    }
-
     try {
         const audio = new Audio('/static/faceit_trumpet.mp3');
         audio.volume = 0.7;
@@ -68,34 +56,6 @@ function connectSSE() {
                     htmx.process(el);
                 }
 
-                if (targetId === 'queue') {
-                    const queuePlayers = el.querySelectorAll('.player:not(.empty)');
-                    const currentQueueSize = queuePlayers.length;
-                    const maxPlayers = parseInt(el.dataset.maxPlayers || '10');
-
-                    console.log("Queue size:", currentQueueSize, "/", maxPlayers);
-
-                    const inQueue = el.dataset.inQueue === 'true';
-
-                    if (inQueue && currentQueueSize === maxPlayers && previousQueueSize < maxPlayers) {
-                        console.log("Queue became full");
-
-                        playNotificationSound();
-
-                        if ('Notification' in window) {
-                            console.log("Notification permission:", Notification.permission);
-                        }
-
-                        if ('Notification' in window && Notification.permission === 'granted') {
-                            new Notification('Match Ready!', {
-                                body: 'Queue is full, match starting...',
-                                icon: '/static/dota-icon.png'
-                            });
-                        }
-                    }
-
-                    previousQueueSize = currentQueueSize;
-                }
             }
             else if (el.classList.contains('dialog-overlay') || el.querySelector('.dialog-overlay')) {
                 document.body.appendChild(el);
