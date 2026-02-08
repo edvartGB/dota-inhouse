@@ -55,8 +55,30 @@
 </div>
 {{end}}
 
+{{define "active-matches-sse"}}
+<div id="active-matches" class="matches-panel" hx-swap-oob="true">
+    <h3>Active Matches ({{len .Matches}})</h3>
+    {{if eq (len .Matches) 0}}
+        <p class="no-matches">No active matches</p>
+    {{else}}
+        <ul class="match-list">
+            {{range .Matches}}
+                <li class="match-item {{.State | matchStateClass}}">
+                    <span class="match-status-badge">{{.State | matchStateName}}</span>
+                    <div class="match-teams">
+                        <span class="team-radiant">{{range $i, $p := .Radiant}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
+                        <span class="vs">vs</span>
+                        <span class="team-dire">{{range $i, $p := .Dire}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
+                    </div>
+                </li>
+            {{end}}
+        </ul>
+    {{end}}
+</div>
+{{end}}
+
 {{define "queue-sse"}}
-<div id="queue" class="queue-panel" hx-swap-oob="true">
+<div id="queue" class="queue-panel" hx-swap-oob="true" data-max-players="10" data-in-queue="{{if .InQueue}}true{{else}}false{{end}}">
     <h3>Queue ({{len .Queue}}/10)</h3>
     <ul class="player-list">
         {{range .Queue}}

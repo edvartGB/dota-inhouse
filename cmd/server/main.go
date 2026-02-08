@@ -33,6 +33,12 @@ func main() {
 	bot1User := getEnv("BOT1_USERNAME", "")
 	bot1Pass := getEnv("BOT1_PASSWORD", "")
 
+	bot2User := getEnv("BOT2_USERNAME", "")
+	bot2Pass := getEnv("BOT2_PASSWORD", "")
+
+	bot3User := getEnv("BOT3_USERNAME", "")
+	bot3Pass := getEnv("BOT3_PASSWORD", "")
+
 	// Admin Steam IDs (comma-separated)
 	adminSteamIDs := getEnv("ADMIN_STEAM_IDS", "")
 
@@ -146,7 +152,8 @@ func main() {
 	var botManager *bot.Manager
 	botCreds := []bot.BotCredentials{
 		{Username: bot1User, Password: bot1Pass},
-		//{Username: bot2User, Password: bot2Pass},
+		{Username: bot2User, Password: bot2Pass},
+		{Username: bot3User, Password: bot3Pass},
 	}
 	// Filter out empty credentials
 	var validCreds []bot.BotCredentials

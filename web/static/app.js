@@ -1,6 +1,41 @@
 // SSE connection for real-time updates
 let eventSource = null;
 let reconnectTimeout = null;
+let previousQueueSize = 0;
+let audioUnlocked = false;
+
+// Unlock audio after first user interaction (required by browsers)
+document.addEventListener('click', () => {
+    if (!audioUnlocked) {
+        const audio = new Audio('/static/faceit_trumpet.mp3');
+        audio.play()
+            .then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+                audioUnlocked = true;
+                console.log("Audio unlocked");
+            })
+            .catch(() => {});
+    }
+}, { once: true });
+
+// Play notification sound
+function playNotificationSound() {
+    if (!audioUnlocked) {
+        console.warn("Audio not unlocked yet");
+        return;
+    }
+
+    try {
+        const audio = new Audio('/static/faceit_trumpet.mp3');
+        audio.volume = 0.7;
+        audio.play().catch(e =>
+            console.warn('Could not play notification sound:', e)
+        );
+    } catch (e) {
+        console.warn('Could not play notification sound:', e);
+    }
+}
 
 function connectSSE() {
     if (eventSource) {
@@ -18,38 +53,69 @@ function connectSSE() {
     };
 
     eventSource.onmessage = (event) => {
-        // Parse the HTML and process OOB swaps
         const container = document.createElement('div');
         container.innerHTML = event.data;
 
-        // Find all elements with hx-swap-oob attribute
         container.querySelectorAll('[hx-swap-oob]').forEach(el => {
             const targetId = el.id;
             const target = document.getElementById(targetId);
 
             if (target) {
-                // Replace the target with the new content
                 target.replaceWith(el);
                 el.removeAttribute('hx-swap-oob');
 
-                // Re-process HTMX attributes on the new content
                 if (typeof htmx !== 'undefined') {
                     htmx.process(el);
                 }
 
-                // Update queue button visibility if this was a queue update
                 if (targetId === 'queue') {
-                    updateQueueButtons();
+                    const queuePlayers = el.querySelectorAll('.player:not(.empty)');
+                    const currentQueueSize = queuePlayers.length;
+                    const maxPlayers = parseInt(el.dataset.maxPlayers || '10');
+
+                    console.log("Queue size:", currentQueueSize, "/", maxPlayers);
+
+                    const inQueue = el.dataset.inQueue === 'true';
+
+                    if (inQueue && currentQueueSize === maxPlayers && previousQueueSize < maxPlayers) {
+                        console.log("Queue became full");
+
+                        playNotificationSound();
+
+                        if ('Notification' in window) {
+                            console.log("Notification permission:", Notification.permission);
+                        }
+
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Match Ready!', {
+                                body: 'Queue is full, match starting...',
+                                icon: '/static/dota-icon.png'
+                            });
+                        }
+                    }
+
+                    previousQueueSize = currentQueueSize;
                 }
-            } else if (el.classList.contains('dialog-overlay')) {
-                // Only append dialog overlays to body, not other elements like panels
+            }
+            else if (el.classList.contains('dialog-overlay') || el.querySelector('.dialog-overlay')) {
                 document.body.appendChild(el);
                 el.removeAttribute('hx-swap-oob');
+
                 if (typeof htmx !== 'undefined') {
                     htmx.process(el);
                 }
+
+                console.log("Dialog overlay received");
+
+                playNotificationSound();
+
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('Match Found!', {
+                        body: 'Click to accept your match.',
+                        icon: '/static/dota-icon.png'
+                    });
+                }
             }
-            // Silently ignore elements that don't have a target (e.g., queue panel on history page)
         });
     };
 
@@ -57,17 +123,24 @@ function connectSSE() {
         console.error('SSE error:', err);
         eventSource.close();
 
-        // Reconnect after 3 seconds
         reconnectTimeout = setTimeout(() => {
-            console.log('Reconnecting SSE...');
-            connectSSE();
-        }, 3000);
+            console.log('SSE connection lost, reloading page...');
+            window.location.reload();
+        }, 2000);
     };
 }
 
 // Connect SSE when page loads
 document.addEventListener('DOMContentLoaded', () => {
     connectSSE();
+
+    if ('Notification' in window) {
+        console.log("Notification permission:", Notification.permission);
+    }
+
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
 });
 
 // Cleanup on page unload
@@ -77,18 +150,3 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// Handle dialog close
-document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('dialog-overlay')) {
-        // Don't allow closing accept dialog by clicking outside
-        // Only close if there's a close button
-    }
-});
-
-// HTMX event handlers for feedback
-document.body.addEventListener('htmx:afterRequest', (event) => {
-    if (event.detail.failed) {
-        console.error('Request failed:', event.detail.xhr.responseText);
-        // Could show an error toast here
-    }
-});

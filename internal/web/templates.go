@@ -61,6 +61,9 @@ func templateFuncs() template.FuncMap {
 			return a
 		},
 		"iterate": func(n int) []int {
+			if n <= 0 {
+				return nil
+			}
 			result := make([]int, n)
 			for i := range result {
 				result[i] = i

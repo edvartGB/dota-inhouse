@@ -2,7 +2,6 @@ package coordinator
 
 import "time"
 
-// Player represents a user in the system.
 type Player struct {
 	SteamID         string `json:"steamId"`
 	Name            string `json:"name"`
@@ -10,7 +9,6 @@ type Player struct {
 	CaptainPriority int    `json:"captainPriority"`
 }
 
-// MatchState represents the current phase of a match.
 type MatchState int
 
 const (
@@ -35,7 +33,6 @@ func (s MatchState) String() string {
 	}
 }
 
-// Match represents an active match being formed or played.
 type Match struct {
 	ID               string
 	State            MatchState
@@ -51,19 +48,16 @@ type Match struct {
 	DotaMatchID      uint64
 }
 
-// LobbySettings holds configurable lobby settings that admins can change at runtime.
 type LobbySettings struct {
 	GameMode string `json:"gameMode"` // "cm", "ap", "cd", "rd", "ar"
 }
 
-// DefaultLobbySettings returns the default lobby settings.
 func DefaultLobbySettings() LobbySettings {
 	return LobbySettings{
 		GameMode: "cm",
 	}
 }
 
-// ValidGameModes are the allowed game mode values.
 var ValidGameModes = map[string]string{
 	"ap": "All Pick",
 	"cm": "Captain's Mode",
@@ -72,14 +66,12 @@ var ValidGameModes = map[string]string{
 	"ar": "All Random",
 }
 
-// State holds all mutable state owned by the coordinator.
 type State struct {
 	Queue         []Player          // Players waiting for a match
 	Matches       map[string]*Match // Active matches keyed by match ID
 	LobbySettings LobbySettings     // Configurable lobby settings
 }
 
-// NewState creates an empty initial state.
 func NewState() *State {
 	return &State{
 		Queue:         []Player{},
@@ -88,7 +80,6 @@ func NewState() *State {
 	}
 }
 
-// IsPlayerInQueue checks if a player is currently in the queue.
 func (s *State) IsPlayerInQueue(steamID string) bool {
 	for _, p := range s.Queue {
 		if p.SteamID == steamID {
@@ -98,12 +89,10 @@ func (s *State) IsPlayerInQueue(steamID string) bool {
 	return false
 }
 
-// IsPlayerInMatch checks if a player is in any active match.
 func (s *State) IsPlayerInMatch(steamID string) bool {
 	return s.GetPlayerMatch(steamID) != nil
 }
 
-// GetPlayerMatch returns the match a player is in, or nil if not in any match.
 func (s *State) GetPlayerMatch(steamID string) *Match {
 	for _, match := range s.Matches {
 		for _, p := range match.Players {
@@ -115,12 +104,10 @@ func (s *State) GetPlayerMatch(steamID string) *Match {
 	return nil
 }
 
-// GetMatch returns a match by ID, or nil if not found.
 func (s *State) GetMatch(matchID string) *Match {
 	return s.Matches[matchID]
 }
 
-// RemoveFromQueue removes a player from the queue by SteamID.
 func (s *State) RemoveFromQueue(steamID string) bool {
 	for i, p := range s.Queue {
 		if p.SteamID == steamID {

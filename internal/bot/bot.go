@@ -18,7 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Bot represents a Steam/Dota 2 bot that can create and manage lobbies.
 type Bot struct {
 	name         string
 	client       *steam.Client
@@ -31,7 +30,6 @@ type Bot struct {
 	mu           sync.Mutex
 }
 
-// NewBot creates a new Steam bot with the given credentials.
 func NewBot(username, password string) *Bot {
 	bot := &Bot{
 		name:   username,
@@ -142,17 +140,14 @@ func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) {
 	}
 }
 
-// IsAvailable returns true if the bot is logged in and not busy.
 func (b *Bot) IsAvailable() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.loggedIn && !b.busy
 }
 
-// LobbyJoinTimeout is the duration players have to join the lobby.
 const LobbyJoinTimeout = 1 * time.Minute
 
-// gameModeFromString converts a game mode string to the Dota 2 protocol value.
 func gameModeFromString(mode string) protocol.DOTA_GameMode {
 	switch mode {
 	case "ap":
@@ -170,8 +165,6 @@ func gameModeFromString(mode string) protocol.DOTA_GameMode {
 	}
 }
 
-// CreateLobby creates a Dota 2 practice lobby for the match.
-// Returns true if lobby was successfully created and monitored, false if it failed early.
 func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordinator.Player, radiant []coordinator.Player, dire []coordinator.Player, gameMode string, commands chan<- coordinator.Command) bool {
 	b.mu.Lock()
 	if !b.loggedIn {
@@ -188,7 +181,6 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 		b.mu.Unlock()
 	}()
 
-	// Initialize Dota 2 client if needed
 	if b.dota2Client == nil {
 		log.Printf("[%s] Creating new Dota 2 client", b.name)
 		logger := logrus.New()
@@ -213,15 +205,14 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 		AllowCheats: proto.Bool(false),
 		GameName:    proto.String(lobbyName),
 		GameMode:    proto.Uint32(uint32(dotaGameMode)),
-		Visibility:  protocol.DOTALobbyVisibility_DOTALobbyVisibility_Friends.Enum(),
+		Visibility:  protocol.DOTALobbyVisibility_DOTALobbyVisibility_Public.Enum(),
+		DotaTvDelay: protocol.LobbyDotaTVDelay_LobbyDotaTV_10.Enum(),
 	}, true)
 
-	// Move bot to unassigned
 	log.Printf("[%s] Moving bot to unassigned pool", b.name)
 	b.dota2Client.JoinLobbyTeam(protocol.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 1)
 	time.Sleep(time.Second)
 
-	// Invite all players
 	log.Printf("[%s] Inviting players", b.name)
 	for _, player := range players {
 		id, err := strconv.ParseUint(player.SteamID, 10, 64)
@@ -233,10 +224,8 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 		}
 	}
 
-	// Notify coordinator that lobby is ready
 	commands <- coordinator.BotLobbyReady{MatchID: matchID}
 
-	// Monitor lobby state with expected team assignments
 	b.monitorLobbyState(ctx, matchID, radiant, dire, commands)
 	return true
 }

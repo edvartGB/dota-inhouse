@@ -11,13 +11,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// MaxPlayers is the number of players required to start a match. Can be overridden via MAX_PLAYERS env var.
+// MaxPlayers can be overridden via MAX_PLAYERS env var.
 var MaxPlayers = 10
 
 const (
 	MatchAcceptTimeoutDur = 30 * time.Second
-	DraftPickTimeoutDur   = 15 * time.Second
-	LobbyJoinTimeoutDur   = 1 * time.Minute
+	DraftPickTimeoutDur   = 60 * time.Second
+	LobbyJoinTimeoutDur   = 5 * time.Minute
 )
 
 // Coordinator owns all mutable state and processes commands sequentially.
@@ -28,7 +28,6 @@ type Coordinator struct {
 	state       *State
 }
 
-// New creates a new Coordinator.
 func New() *Coordinator {
 	return &Coordinator{
 		commands:    make(chan Command, 100),
@@ -38,25 +37,20 @@ func New() *Coordinator {
 	}
 }
 
-// Send submits a command to the coordinator.
 func (c *Coordinator) Send(cmd Command) {
 	c.commands <- cmd
 }
 
-// Events returns the main event channel for consumers.
 func (c *Coordinator) Events() <-chan Event {
 	return c.events
 }
 
-// Subscribe creates a new event channel for a consumer.
-// The returned channel will receive all events emitted by the coordinator.
 func (c *Coordinator) Subscribe() <-chan Event {
 	ch := make(chan Event, 100)
 	c.subscribers = append(c.subscribers, ch)
 	return ch
 }
 
-// Run starts the coordinator loop. It blocks until ctx is cancelled.
 func (c *Coordinator) Run(ctx context.Context) {
 	log.Println("Coordinator started")
 	for {
@@ -71,14 +65,12 @@ func (c *Coordinator) Run(ctx context.Context) {
 }
 
 func (c *Coordinator) emit(e Event) {
-	// Send to main events channel
 	select {
 	case c.events <- e:
 	default:
 		log.Println("Warning: main event channel full, dropping event")
 	}
 
-	// Send to all subscribers
 	for _, ch := range c.subscribers {
 		select {
 		case ch <- e:
@@ -142,23 +134,19 @@ func (c *Coordinator) handleCommand(cmd Command) {
 }
 
 func (c *Coordinator) handleJoinQueue(cmd JoinQueue) error {
-	// Check if player is already in queue
 	if c.state.IsPlayerInQueue(cmd.Player.SteamID) {
 		return errors.New("already in queue")
 	}
 
-	// Check if player is in an active match
 	if c.state.IsPlayerInMatch(cmd.Player.SteamID) {
 		return errors.New("already in a match")
 	}
 
-	// Add to queue
 	c.state.Queue = append(c.state.Queue, cmd.Player)
 	log.Printf("Player %s joined queue (%d/%d)", cmd.Player.Name, len(c.state.Queue), MaxPlayers)
 
 	c.emit(QueueUpdated{Queue: c.state.Queue})
 
-	// Check if queue is full
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
 	}
@@ -167,7 +155,6 @@ func (c *Coordinator) handleJoinQueue(cmd JoinQueue) error {
 }
 
 func (c *Coordinator) handleLeaveQueue(cmd LeaveQueue) error {
-	// Can't leave if in a match
 	if c.state.IsPlayerInMatch(cmd.PlayerID) {
 		return errors.New("cannot leave queue while in a match")
 	}
@@ -183,7 +170,6 @@ func (c *Coordinator) handleLeaveQueue(cmd LeaveQueue) error {
 }
 
 func (c *Coordinator) startMatchAcceptance() {
-	// Take first 10 players from queue
 	players := make([]Player, MaxPlayers)
 	copy(players, c.state.Queue[:MaxPlayers])
 	c.state.Queue = c.state.Queue[MaxPlayers:]
@@ -209,7 +195,6 @@ func (c *Coordinator) startMatchAcceptance() {
 		Deadline: deadline,
 	})
 
-	// Schedule timeout
 	go func() {
 		time.Sleep(MatchAcceptTimeoutDur)
 		c.Send(MatchAcceptTimeout{
@@ -229,7 +214,6 @@ func (c *Coordinator) handleAcceptMatch(cmd AcceptMatch) error {
 		return errors.New("match not in accepting state")
 	}
 
-	// Verify player is in this match
 	found := false
 	for _, p := range match.Players {
 		if p.SteamID == cmd.PlayerID {
@@ -249,7 +233,6 @@ func (c *Coordinator) handleAcceptMatch(cmd AcceptMatch) error {
 		Accepted: match.AcceptedPlayers,
 	})
 
-	// Check if all players accepted
 	if len(match.AcceptedPlayers) >= MaxPlayers {
 		c.startDraft(match)
 	}
@@ -269,7 +252,6 @@ func (c *Coordinator) handleMatchAcceptTimeout(cmd MatchAcceptTimeout) {
 
 	log.Printf("Match %s accept timeout", cmd.MatchID)
 
-	// Find players who didn't accept
 	var failedPlayers []string
 	var acceptedPlayers []Player
 
@@ -282,7 +264,6 @@ func (c *Coordinator) handleMatchAcceptTimeout(cmd MatchAcceptTimeout) {
 		}
 	}
 
-	// Return accepted players to queue
 	c.state.Queue = append(acceptedPlayers, c.state.Queue...)
 
 	c.emit(MatchCancelled{
@@ -291,10 +272,8 @@ func (c *Coordinator) handleMatchAcceptTimeout(cmd MatchAcceptTimeout) {
 	})
 	c.emit(QueueUpdated{Queue: c.state.Queue})
 
-	// Remove match
 	delete(c.state.Matches, cmd.MatchID)
 
-	// Check if queue is full again
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
 	}
@@ -305,10 +284,8 @@ func (c *Coordinator) startDraft(match *Match) {
 		return
 	}
 
-	// Select captains based on captain priority (higher = more likely)
 	captains := selectCaptains(match.Players)
 
-	// Available players are everyone except captains
 	var available []Player
 	for _, p := range match.Players {
 		if p.SteamID != captains[0].SteamID && p.SteamID != captains[1].SteamID {
@@ -341,7 +318,6 @@ func (c *Coordinator) startDraft(match *Match) {
 		return
 	}
 
-	// Schedule first pick timeout
 	c.scheduleDraftTimeout(match.ID, 0)
 }
 
@@ -355,13 +331,11 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 		return errors.New("match not in drafting state")
 	}
 
-	// Verify picker is the current captain
 	currentCaptain := match.Captains[match.CurrentPicker]
 	if currentCaptain.SteamID != cmd.CaptainID {
 		return errors.New("not your turn to pick")
 	}
 
-	// Find and remove picked player from available
 	var pickedPlayer *Player
 	for i, p := range match.AvailablePlayers {
 		if p.SteamID == cmd.PickedID {
@@ -378,7 +352,6 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 		return errors.New("player not available for picking")
 	}
 
-	// Add to appropriate team
 	if match.CurrentPicker == 0 {
 		match.Radiant = append(match.Radiant, *pickedPlayer)
 	} else {
@@ -389,7 +362,6 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 		currentCaptain.Name, pickedPlayer.Name,
 		map[int]string{0: "Radiant", 1: "Dire"}[match.CurrentPicker], match.PickCount+1)
 
-	// Increment pick count and determine next picker using 1-2-2-2-1 order
 	match.PickCount++
 	match.CurrentPicker = getPickerForPickCount(match.PickCount)
 
@@ -402,11 +374,9 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 		CurrentPicker:    match.CurrentPicker,
 	})
 
-	// Check if draft is complete
 	if len(match.AvailablePlayers) == 0 {
 		c.completeDraft(match)
 	} else {
-		// Schedule timeout for next pick
 		c.scheduleDraftTimeout(match.ID, match.PickCount)
 	}
 
@@ -451,16 +421,14 @@ func (c *Coordinator) handleDraftPickTimeout(cmd DraftPickTimeout) {
 		return // No longer in drafting phase
 	}
 
-	// Check if this timeout is still valid (pick hasn't happened yet)
+	// Stale timeout — pick was already made
 	if match.PickCount != cmd.PickNumber {
-		return // Pick already made, timeout is stale
+		return
 	}
 
-	// Captain failed to pick in time
 	failedCaptain := match.Captains[match.CurrentPicker]
 	log.Printf("Match %s: Captain %s failed to pick in time", cmd.MatchID, failedCaptain.Name)
 
-	// Collect all players except the failed captain to return to queue
 	var returnToQueue []Player
 	for _, p := range match.Players {
 		if p.SteamID != failedCaptain.SteamID {
@@ -468,7 +436,6 @@ func (c *Coordinator) handleDraftPickTimeout(cmd DraftPickTimeout) {
 		}
 	}
 
-	// Return players to front of queue
 	c.state.Queue = append(returnToQueue, c.state.Queue...)
 
 	c.emit(DraftCancelled{
@@ -478,10 +445,8 @@ func (c *Coordinator) handleDraftPickTimeout(cmd DraftPickTimeout) {
 	})
 	c.emit(QueueUpdated{Queue: c.state.Queue})
 
-	// Remove match
 	delete(c.state.Matches, cmd.MatchID)
 
-	// Check if queue is full again
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
 	}
@@ -502,18 +467,16 @@ func (c *Coordinator) handleBotLobbyTimeout(cmd BotLobbyTimeout) {
 	}
 
 	if match.State != MatchStateWaitingForBot {
-		return // Already moved past waiting (game started)
+		return // Game already started
 	}
 
 	log.Printf("Match %s: lobby join timeout", cmd.MatchID)
 
-	// Build set of players who joined correctly
 	joinedCorrectly := make(map[string]bool)
 	for _, steamID := range cmd.PlayersJoinedRight {
 		joinedCorrectly[steamID] = true
 	}
 
-	// Separate players into those who joined correctly and those who failed
 	var returnToQueue []Player
 	var failedPlayers []Player
 	for _, p := range match.Players {
@@ -527,7 +490,6 @@ func (c *Coordinator) handleBotLobbyTimeout(cmd BotLobbyTimeout) {
 	log.Printf("Match %s: %d players joined correctly, %d failed",
 		cmd.MatchID, len(returnToQueue), len(failedPlayers))
 
-	// Return correct players to front of queue
 	c.state.Queue = append(returnToQueue, c.state.Queue...)
 
 	c.emit(LobbyCancelled{
@@ -537,10 +499,8 @@ func (c *Coordinator) handleBotLobbyTimeout(cmd BotLobbyTimeout) {
 	})
 	c.emit(QueueUpdated{Queue: c.state.Queue})
 
-	// Remove match
 	delete(c.state.Matches, cmd.MatchID)
 
-	// Check if queue is full again
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
 	}
@@ -580,23 +540,19 @@ func (c *Coordinator) handleBotGameEnded(cmd BotGameEnded) {
 		Winner:      cmd.Winner,
 	})
 
-	// Remove match
 	delete(c.state.Matches, cmd.MatchID)
 
-	// Check if queue has enough for new match
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
 	}
 }
 
-// stateSnapshot holds a snapshot of the coordinator state.
 type stateSnapshot struct {
 	Queue         []Player
 	Matches       map[string]*Match
 	LobbySettings LobbySettings
 }
 
-// GetState returns a snapshot of the current state.
 func (c *Coordinator) GetState() ([]Player, map[string]*Match, LobbySettings) {
 	respCh := make(chan stateSnapshot, 1)
 	c.commands <- getStateCmd{Response: respCh}
@@ -604,21 +560,18 @@ func (c *Coordinator) GetState() ([]Player, map[string]*Match, LobbySettings) {
 	return resp.Queue, resp.Matches, resp.LobbySettings
 }
 
-// GetPlayerMatch returns the match a player is in, or nil.
 func (c *Coordinator) GetPlayerMatch(playerID string) *Match {
 	respCh := make(chan *Match, 1)
 	c.commands <- getPlayerMatchCmd{PlayerID: playerID, Response: respCh}
 	return <-respCh
 }
 
-// getStateCmd is an internal command to safely get state snapshot.
 type getStateCmd struct {
 	Response chan stateSnapshot
 }
 
 func (getStateCmd) command() {}
 
-// getPlayerMatchCmd is an internal command to get a player's match.
 type getPlayerMatchCmd struct {
 	PlayerID string
 	Response chan *Match
@@ -626,24 +579,22 @@ type getPlayerMatchCmd struct {
 
 func (getPlayerMatchCmd) command() {}
 
-// selectCaptains selects two captains from the player list.
-// Players with higher CaptainPriority are more likely to be selected.
-// If priorities are equal, selection is random.
+// selectCaptains picks two captains weighted by CaptainPriority.
+// Equal priorities are broken randomly.
 func selectCaptains(players []Player) [2]Player {
 	if len(players) < 2 {
 		return [2]Player{}
 	}
 
-	// Create a copy and sort by priority (descending), with random tiebreaker
 	sorted := make([]Player, len(players))
 	copy(sorted, players)
 
-	// Shuffle first to randomize players with equal priority
+	// Shuffle to randomize equal-priority players
 	rand.Shuffle(len(sorted), func(i, j int) {
 		sorted[i], sorted[j] = sorted[j], sorted[i]
 	})
 
-	// Stable sort by priority (higher priority first)
+	// Stable sort keeps random order within same priority
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return sorted[i].CaptainPriority > sorted[j].CaptainPriority
 	})
@@ -651,15 +602,12 @@ func selectCaptains(players []Player) [2]Player {
 	return [2]Player{sorted[0], sorted[1]}
 }
 
-// getPickerForPickCount returns which captain (0=Radiant, 1=Dire) should pick
-// for the given pick number using 1-2-2-2-1 draft order.
-// Pick 0: Radiant (1)
-// Pick 1-2: Dire (2)
-// Pick 3-4: Radiant (2)
-// Pick 5-6: Dire (2)
-// Pick 7: Radiant (1)
+// getPickerForPickCount returns which captain (0=Radiant, 1=Dire) picks
+// at the given pick number. Uses 1-2-2-2-1 draft order:
+//
+//	Pick 0: Radiant, Pick 1-2: Dire, Pick 3-4: Radiant,
+//	Pick 5-6: Dire, Pick 7: Radiant
 func getPickerForPickCount(pickCount int) int {
-	// 1-2-2-2-1 pattern for 8 picks
 	switch pickCount {
 	case 0:
 		return 0 // Radiant
@@ -672,12 +620,10 @@ func getPickerForPickCount(pickCount int) int {
 	case 7:
 		return 0 // Radiant
 	default:
-		// For any additional picks beyond 8, alternate
 		return pickCount % 2
 	}
 }
 
-// handleAdminCancelMatch cancels a match regardless of state.
 func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
 	match := c.state.GetMatch(cmd.MatchID)
 	if match == nil {
@@ -687,7 +633,6 @@ func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
 	log.Printf("Admin cancelled match %s (state: %v, return to queue: %v)", cmd.MatchID, match.State, cmd.ReturnToQueue)
 
 	if cmd.ReturnToQueue {
-		// Return all players to queue
 		for _, p := range match.Players {
 			if !c.state.IsPlayerInQueue(p.SteamID) {
 				c.state.Queue = append(c.state.Queue, p)
@@ -695,7 +640,6 @@ func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
 		}
 	}
 
-	// Emit cancellation event
 	c.emit(MatchCancelledByAdmin{
 		MatchID:         cmd.MatchID,
 		ReturnedToQueue: cmd.ReturnToQueue,
@@ -703,10 +647,8 @@ func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
 	})
 	c.emit(QueueUpdated{Queue: c.state.Queue})
 
-	// Remove match
 	delete(c.state.Matches, cmd.MatchID)
 
-	// Check if queue is full again
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
 	}
@@ -714,7 +656,6 @@ func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
 	return nil
 }
 
-// handleAdminSetMatchResult manually sets the result of a match.
 func (c *Coordinator) handleAdminSetMatchResult(cmd AdminSetMatchResult) error {
 	match := c.state.GetMatch(cmd.MatchID)
 	if match == nil {
@@ -727,7 +668,6 @@ func (c *Coordinator) handleAdminSetMatchResult(cmd AdminSetMatchResult) error {
 
 	log.Printf("Admin set match %s result: %s wins", cmd.MatchID, cmd.Winner)
 
-	// Emit completion event with admin-set winner
 	winner := cmd.Winner
 	c.emit(MatchCompleted{
 		MatchID:     cmd.MatchID,
@@ -738,10 +678,8 @@ func (c *Coordinator) handleAdminSetMatchResult(cmd AdminSetMatchResult) error {
 		Winner:      &winner,
 	})
 
-	// Remove match
 	delete(c.state.Matches, cmd.MatchID)
 
-	// Check if queue has enough for new match
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
 	}
@@ -749,7 +687,6 @@ func (c *Coordinator) handleAdminSetMatchResult(cmd AdminSetMatchResult) error {
 	return nil
 }
 
-// handleAdminKickFromQueue removes a player from the queue.
 func (c *Coordinator) handleAdminKickFromQueue(cmd AdminKickFromQueue) error {
 	found := false
 	newQueue := make([]Player, 0, len(c.state.Queue))
@@ -772,7 +709,6 @@ func (c *Coordinator) handleAdminKickFromQueue(cmd AdminKickFromQueue) error {
 	return nil
 }
 
-// handleAdminSetLobbySettings updates the lobby settings.
 func (c *Coordinator) handleAdminSetLobbySettings(cmd AdminSetLobbySettings) error {
 	if _, ok := ValidGameModes[cmd.Settings.GameMode]; !ok {
 		return errors.New("invalid game mode")

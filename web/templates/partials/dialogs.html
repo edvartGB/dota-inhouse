@@ -9,13 +9,29 @@
                 {{template "accept-status" .}}
             </div>
 
-            <button hx-post="/match/{{.MatchID}}/accept"
-                    hx-swap="none"
-                    class="btn btn-primary btn-large">
-                Accept Match
-            </button>
+            <div id="accept-button-container">
+                {{template "accept-button" .}}
+            </div>
         </div>
     </div>
+</div>
+{{end}}
+
+{{define "accept-button"}}
+<div id="accept-button-container" hx-swap-oob="true">
+    {{if .UserAccepted}}
+        <button class="btn btn-primary btn-large" disabled>
+            ✓ Accepted
+        </button>
+    {{else}}
+        <button hx-post="/match/{{.MatchID}}/accept"
+                hx-swap="none"
+                class="btn btn-primary btn-large"
+                id="accept-btn"
+                hx-disabled-elt="this">
+            Accept Match
+        </button>
+    {{end}}
 </div>
 {{end}}
 
@@ -73,6 +89,15 @@
         {{if gt (len .FailedPlayers) 0}}
         <p class="failed-players">Failed to join: {{range $i, $p := .FailedPlayers}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</p>
         {{end}}
+    </div>
+</div>
+{{end}}
+
+{{define "admin-match-cancelled"}}
+<div id="match-area" hx-swap-oob="true">
+    <div class="notification error">
+        <h3>Match Cancelled by Admin</h3>
+        <p>{{.Message}}</p>
     </div>
 </div>
 {{end}}

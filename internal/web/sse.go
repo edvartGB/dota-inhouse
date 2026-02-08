@@ -12,14 +12,12 @@ import (
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 )
 
-// SSEClient represents a connected SSE client.
 type SSEClient struct {
 	ID      string
 	UserID  string
 	Channel chan string
 }
 
-// SSEHub manages SSE connections and broadcasts events.
 type SSEHub struct {
 	clients     map[*SSEClient]bool
 	mu          sync.RWMutex
@@ -28,7 +26,6 @@ type SSEHub struct {
 	devMode     bool
 }
 
-// NewSSEHub creates a new SSE hub.
 func NewSSEHub(templates *template.Template, coord *coordinator.Coordinator, devMode bool) *SSEHub {
 	return &SSEHub{
 		clients:     make(map[*SSEClient]bool),
@@ -38,7 +35,6 @@ func NewSSEHub(templates *template.Template, coord *coordinator.Coordinator, dev
 	}
 }
 
-// Run starts the SSE hub, processing events from the coordinator.
 func (h *SSEHub) Run(events <-chan coordinator.Event) {
 	log.Println("SSE hub started")
 	for event := range events {
@@ -50,7 +46,6 @@ func (h *SSEHub) broadcast(event coordinator.Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	// Check if this is a match-related event that should update the matches panel for everyone
 	var matchesHTML string
 	if h.isMatchEvent(event) {
 		matchesHTML = h.renderActiveMatches()
@@ -59,7 +54,6 @@ func (h *SSEHub) broadcast(event coordinator.Event) {
 	for client := range h.clients {
 		html := h.renderEventForUser(event, client.UserID)
 
-		// For match events, always send the matches panel update even if user isn't in the match
 		if html == "" && matchesHTML != "" {
 			html = matchesHTML
 		} else if html != "" && matchesHTML != "" {
@@ -78,7 +72,6 @@ func (h *SSEHub) broadcast(event coordinator.Event) {
 	}
 }
 
-// isMatchEvent returns true if the event affects match state.
 func (h *SSEHub) isMatchEvent(event coordinator.Event) bool {
 	switch event.(type) {
 	case coordinator.MatchAcceptStarted,
@@ -102,7 +95,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 
 	switch e := event.(type) {
 	case coordinator.QueueUpdated:
-		// Check if user is in queue for personalized button state
 		inQueue := false
 		for _, p := range e.Queue {
 			if p.SteamID == userID {
@@ -110,7 +102,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 				break
 			}
 		}
-		// Check if user is in a match
 		inMatch := h.coordinator.GetPlayerMatch(userID) != nil
 		data := struct {
 			Queue   []coordinator.Player
@@ -128,17 +119,21 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		data := struct {
-			MatchID  string
-			Players  []coordinator.Player
-			Deadline string
-			Count    int
-			Total    int
+			MatchID       string
+			Players       []coordinator.Player
+			Deadline      string
+			Count         int
+			Total         int
+			UserID        string
+			UserAccepted  bool
 		}{
-			MatchID:  e.MatchID,
-			Players:  e.Players,
-			Deadline: e.Deadline.Format("2006-01-02T15:04:05Z"),
-			Count:    0,
-			Total:    coordinator.MaxPlayers,
+			MatchID:       e.MatchID,
+			Players:       e.Players,
+			Deadline:      e.Deadline.Format("2006-01-02T15:04:05Z"),
+			Count:         0,
+			Total:         coordinator.MaxPlayers,
+			UserID:        userID,
+			UserAccepted:  false,
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "accept-dialog", data); err != nil {
 			log.Printf("Failed to render accept dialog: %v", err)
@@ -151,19 +146,29 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		if match == nil || match.ID != e.MatchID {
 			return ""
 		}
+		userAccepted := e.Accepted[userID]
 		data := struct {
-			MatchID  string
-			Accepted map[string]bool
-			Count    int
-			Total    int
+			MatchID      string
+			Accepted     map[string]bool
+			Count        int
+			Total        int
+			UserID       string
+			UserAccepted bool
 		}{
-			MatchID:  e.MatchID,
-			Accepted: e.Accepted,
-			Count:    len(e.Accepted),
-			Total:    coordinator.MaxPlayers,
+			MatchID:      e.MatchID,
+			Accepted:     e.Accepted,
+			Count:        len(e.Accepted),
+			Total:        coordinator.MaxPlayers,
+			UserID:       userID,
+			UserAccepted: userAccepted,
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "accept-status", data); err != nil {
 			log.Printf("Failed to render accept status: %v", err)
+			return ""
+		}
+
+		if err := h.templates.ExecuteTemplate(&buf, "accept-button", data); err != nil {
+			log.Printf("Failed to render accept button: %v", err)
 			return ""
 		}
 
@@ -206,8 +211,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}
 
 	case coordinator.MatchCancelled:
-		// Only send to users who were in this match (check via coordinator - they're back in queue now)
-		// Since players are returned to queue, we check if user's match is nil and they got this event
+		// Players are already returned to queue, so check they're not in a different match
 		match := h.coordinator.GetPlayerMatch(userID)
 		if match != nil && match.ID != e.MatchID {
 			return "" // User is in a different match
@@ -227,7 +231,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			log.Printf("Failed to render draft cancelled: %v", err)
 			return ""
 		}
-		// Also render queue panel for users returned to queue
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
 			queue, _, _ := h.coordinator.GetState()
 			inQueue := false
@@ -248,7 +251,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}
 
 	case coordinator.LobbyCancelled:
-		// Send to users who were in this match (both failed and returned)
 		wasInMatch := isUserInPlayers(userID, e.ReturnedToQueue) || isUserInPlayers(userID, e.FailedPlayers)
 		if !wasInMatch {
 			return ""
@@ -257,7 +259,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			log.Printf("Failed to render lobby cancelled: %v", err)
 			return ""
 		}
-		// Also render queue panel for users returned to queue
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
 			queue, _, _ := h.coordinator.GetState()
 			inQueue := false
@@ -295,17 +296,13 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}
 
 	case coordinator.MatchCompleted:
-		// Check if user was in this match
-		wasInMatch := isUserInPlayers(userID, e.Players)
-		if !wasInMatch {
-			return "" // User wasn't in this match, no update needed
+		if !isUserInPlayers(userID, e.Players) {
+			return ""
 		}
-		// Render match completed notification
 		if err := h.templates.ExecuteTemplate(&buf, "match-completed", e); err != nil {
 			log.Printf("Failed to render match completed: %v", err)
 			return ""
 		}
-		// Also render the queue panel so user can join queue again
 		queue, _, _ := h.coordinator.GetState()
 		inQueue := false
 		for _, p := range queue {
@@ -322,6 +319,46 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 			log.Printf("Failed to render queue after match completed: %v", err)
 		}
+		if err := h.templates.ExecuteTemplate(&buf, "active-matches-sse", struct{ Matches []*coordinator.Match }{Matches: []*coordinator.Match{}}); err != nil {
+			log.Printf("Failed to render active matches after completion: %v", err)
+		}
+
+	case coordinator.MatchCancelledByAdmin:
+		if !isUserInPlayers(userID, e.Players) {
+			return ""
+		}
+		data := struct {
+			MatchID string
+			Message string
+		}{
+			MatchID: e.MatchID,
+			Message: "Match was cancelled by admin.",
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "admin-match-cancelled", data); err != nil {
+			log.Printf("Failed to render admin cancel: %v", err)
+			return ""
+		}
+		if e.ReturnedToQueue {
+			queue, _, _ := h.coordinator.GetState()
+			inQueue := false
+			for _, p := range queue {
+				if p.SteamID == userID {
+					inQueue = true
+					break
+				}
+			}
+			queueData := struct {
+				Queue   []coordinator.Player
+				InQueue bool
+				InMatch bool
+			}{Queue: queue, InQueue: inQueue, InMatch: false}
+			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
+				log.Printf("Failed to render queue after admin cancel: %v", err)
+			}
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "active-matches-sse", struct{ Matches []*coordinator.Match }{Matches: []*coordinator.Match{}}); err != nil {
+			log.Printf("Failed to render active matches after admin cancel: %v", err)
+		}
 
 	default:
 		return ""
@@ -330,7 +367,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 	return buf.String()
 }
 
-// DraftData holds data for rendering the draft UI.
 type DraftData struct {
 	MatchID          string
 	Captains         [2]coordinator.Player
@@ -341,11 +377,9 @@ type DraftData struct {
 	DevMode          bool
 }
 
-// renderInitialState renders the current state for a newly connected client.
 func (h *SSEHub) renderInitialState(userID string) string {
 	queue, matches, _ := h.coordinator.GetState()
 
-	// Check if user is in queue
 	inQueue := false
 	for _, p := range queue {
 		if p.SteamID == userID {
@@ -354,10 +388,8 @@ func (h *SSEHub) renderInitialState(userID string) string {
 		}
 	}
 
-	// Check if user is in a match
 	inMatch := h.coordinator.GetPlayerMatch(userID) != nil
 
-	// Convert matches map to slice
 	matchList := make([]*coordinator.Match, 0, len(matches))
 	for _, m := range matches {
 		matchList = append(matchList, m)
@@ -365,7 +397,6 @@ func (h *SSEHub) renderInitialState(userID string) string {
 
 	var buf bytes.Buffer
 
-	// Render queue
 	queueData := struct {
 		Queue   []coordinator.Player
 		InQueue bool
@@ -376,7 +407,6 @@ func (h *SSEHub) renderInitialState(userID string) string {
 		return ""
 	}
 
-	// Render active matches
 	matchesData := struct {
 		Matches []*coordinator.Match
 	}{Matches: matchList}
@@ -388,7 +418,6 @@ func (h *SSEHub) renderInitialState(userID string) string {
 	return buf.String()
 }
 
-// renderActiveMatches renders the active-matches panel.
 func (h *SSEHub) renderActiveMatches() string {
 	_, matches, _ := h.coordinator.GetState()
 
@@ -410,9 +439,7 @@ func (h *SSEHub) renderActiveMatches() string {
 	return buf.String()
 }
 
-// HandleConnection handles a new SSE connection.
 func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID string) {
-	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -420,14 +447,12 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 	// Disable buffering for Cloudflare/nginx proxies
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	// Create client
 	client := &SSEClient{
 		ID:      fmt.Sprintf("%p", r),
 		UserID:  userID,
 		Channel: make(chan string, 10),
 	}
 
-	// Register client
 	h.mu.Lock()
 	h.clients[client] = true
 	h.mu.Unlock()
@@ -443,18 +468,15 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 		log.Printf("SSE client disconnected: %s", client.ID)
 	}()
 
-	// Get flusher
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "SSE not supported", http.StatusInternalServerError)
 		return
 	}
 
-	// Send initial keepalive
 	fmt.Fprintf(w, ": connected\n\n")
 	flusher.Flush()
 
-	// Send initial state sync
 	if initialHTML := h.renderInitialState(userID); initialHTML != "" {
 		lines := strings.Split(initialHTML, "\n")
 		for _, line := range lines {
@@ -464,7 +486,6 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 		flusher.Flush()
 	}
 
-	// Listen for events or disconnect
 	for {
 		select {
 		case <-r.Context().Done():
@@ -473,18 +494,16 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 			if !ok {
 				return
 			}
-			// Send SSE message - each line must be prefixed with "data: "
 			lines := strings.Split(msg, "\n")
 			for _, line := range lines {
 				fmt.Fprintf(w, "data: %s\n", line)
 			}
-			fmt.Fprintf(w, "\n") // Empty line marks end of message
+			fmt.Fprintf(w, "\n")
 			flusher.Flush()
 		}
 	}
 }
 
-// SendToUser sends a message to a specific user.
 func (h *SSEHub) SendToUser(userID string, html string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -500,12 +519,10 @@ func (h *SSEHub) SendToUser(userID string, html string) {
 	}
 }
 
-// isUserInMatch checks if a user is in the given player list.
 func isUserInMatch(userID string, players []coordinator.Player) bool {
 	return isUserInPlayers(userID, players)
 }
 
-// isUserInPlayers checks if a user is in the given player list.
 func isUserInPlayers(userID string, players []coordinator.Player) bool {
 	for _, p := range players {
 		if p.SteamID == userID {

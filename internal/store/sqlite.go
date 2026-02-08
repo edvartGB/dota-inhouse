@@ -9,19 +9,16 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// SQLiteStore implements Store using SQLite.
 type SQLiteStore struct {
 	db *sql.DB
 }
 
-// NewSQLiteStore creates a new SQLite store and runs migrations.
 func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Enable foreign keys
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
@@ -88,12 +85,10 @@ func (s *SQLiteStore) migrate() error {
 	return nil
 }
 
-// Close closes the database connection.
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
-// GetUser retrieves a user by SteamID.
 func (s *SQLiteStore) GetUser(ctx context.Context, steamID string) (*User, error) {
 	var user User
 	err := s.db.QueryRowContext(ctx,
@@ -111,7 +106,6 @@ func (s *SQLiteStore) GetUser(ctx context.Context, steamID string) (*User, error
 	return &user, nil
 }
 
-// UpsertUser creates or updates a user.
 func (s *SQLiteStore) UpsertUser(ctx context.Context, user *User) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO users (steam_id, name, avatar_url, captain_priority, created_at, updated_at)
@@ -126,7 +120,6 @@ func (s *SQLiteStore) UpsertUser(ctx context.Context, user *User) error {
 	return err
 }
 
-// ListUsers returns all registered users.
 func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at
@@ -147,7 +140,6 @@ func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	return users, rows.Err()
 }
 
-// UpdateCaptainPriority updates a user's captain priority.
 func (s *SQLiteStore) UpdateCaptainPriority(ctx context.Context, steamID string, priority int) error {
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE users SET captain_priority = ?, updated_at = ? WHERE steam_id = ?`,
@@ -165,7 +157,6 @@ func (s *SQLiteStore) UpdateCaptainPriority(ctx context.Context, steamID string,
 	return nil
 }
 
-// CreateSession creates a new session.
 func (s *SQLiteStore) CreateSession(ctx context.Context, session *Session) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, steam_id, created_at, expires_at)
@@ -175,7 +166,6 @@ func (s *SQLiteStore) CreateSession(ctx context.Context, session *Session) error
 	return err
 }
 
-// GetSession retrieves a session by ID.
 func (s *SQLiteStore) GetSession(ctx context.Context, sessionID string) (*Session, error) {
 	var session Session
 	err := s.db.QueryRowContext(ctx,
@@ -193,19 +183,16 @@ func (s *SQLiteStore) GetSession(ctx context.Context, sessionID string) (*Sessio
 	return &session, nil
 }
 
-// DeleteSession removes a session.
 func (s *SQLiteStore) DeleteSession(ctx context.Context, sessionID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, sessionID)
 	return err
 }
 
-// DeleteExpiredSessions removes all expired sessions.
 func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, time.Now())
 	return err
 }
 
-// CreateMatch creates a new match record.
 func (s *SQLiteStore) CreateMatch(ctx context.Context, match *Match) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO matches (id, dota_match_id, state, started_at, ended_at, winner, duration)
@@ -215,7 +202,6 @@ func (s *SQLiteStore) CreateMatch(ctx context.Context, match *Match) error {
 	return err
 }
 
-// UpdateMatch updates an existing match.
 func (s *SQLiteStore) UpdateMatch(ctx context.Context, match *Match) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE matches SET dota_match_id = ?, state = ?, ended_at = ?, winner = ?, duration = ?
@@ -225,7 +211,6 @@ func (s *SQLiteStore) UpdateMatch(ctx context.Context, match *Match) error {
 	return err
 }
 
-// GetMatch retrieves a match by ID.
 func (s *SQLiteStore) GetMatch(ctx context.Context, matchID string) (*Match, error) {
 	var match Match
 	err := s.db.QueryRowContext(ctx,
@@ -243,7 +228,6 @@ func (s *SQLiteStore) GetMatch(ctx context.Context, matchID string) (*Match, err
 	return &match, nil
 }
 
-// AddMatchPlayer adds a player to a match.
 func (s *SQLiteStore) AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO match_players (match_id, steam_id, team, was_captain, accepted)
@@ -253,7 +237,6 @@ func (s *SQLiteStore) AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error
 	return err
 }
 
-// GetMatchPlayers retrieves all players for a match.
 func (s *SQLiteStore) GetMatchPlayers(ctx context.Context, matchID string) ([]MatchPlayer, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT match_id, steam_id, team, was_captain, accepted
@@ -274,7 +257,6 @@ func (s *SQLiteStore) GetMatchPlayers(ctx context.Context, matchID string) ([]Ma
 	return players, rows.Err()
 }
 
-// ListMatches retrieves the most recent matches.
 func (s *SQLiteStore) ListMatches(ctx context.Context, limit int) ([]Match, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, dota_match_id, state, started_at, ended_at, winner, duration
@@ -298,9 +280,7 @@ func (s *SQLiteStore) ListMatches(ctx context.Context, limit int) ([]Match, erro
 	return matches, rows.Err()
 }
 
-// GetLeaderboard retrieves player stats for the leaderboard.
 func (s *SQLiteStore) GetLeaderboard(ctx context.Context, startDate, endDate *time.Time) ([]LeaderboardEntry, error) {
-	// Build query with optional date filtering
 	query := `
 		SELECT
 			mp.steam_id,
@@ -327,7 +307,7 @@ func (s *SQLiteStore) GetLeaderboard(ctx context.Context, startDate, endDate *ti
 
 	query += `
 		GROUP BY mp.steam_id
-		ORDER BY wins DESC, total DESC
+		ORDER BY (wins - losses) DESC, total DESC
 	`
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -358,7 +338,6 @@ func (s *SQLiteStore) GetLeaderboard(ctx context.Context, startDate, endDate *ti
 		return nil, err
 	}
 
-	// Calculate streaks for each player
 	for i := range entries {
 		entries[i].Streak = s.calculateStreak(ctx, entries[i].SteamID, startDate, endDate)
 	}
@@ -366,7 +345,6 @@ func (s *SQLiteStore) GetLeaderboard(ctx context.Context, startDate, endDate *ti
 	return entries, nil
 }
 
-// calculateStreak calculates a player's current win/loss streak.
 func (s *SQLiteStore) calculateStreak(ctx context.Context, steamID string, startDate, endDate *time.Time) int {
 	query := `
 		SELECT
@@ -418,7 +396,6 @@ func (s *SQLiteStore) calculateStreak(ctx context.Context, steamID string, start
 	return streak
 }
 
-// ListMatchesWithPlayers retrieves recent matches with full player info.
 func (s *SQLiteStore) ListMatchesWithPlayers(ctx context.Context, limit int) ([]MatchWithPlayers, error) {
 	matches, err := s.ListMatches(ctx, limit)
 	if err != nil {
@@ -429,7 +406,6 @@ func (s *SQLiteStore) ListMatchesWithPlayers(ctx context.Context, limit int) ([]
 	for _, m := range matches {
 		mwp := MatchWithPlayers{Match: m}
 
-		// Get players with user info
 		rows, err := s.db.QueryContext(ctx,
 			`SELECT mp.steam_id, u.name, u.avatar_url, mp.team, mp.was_captain
 			 FROM match_players mp

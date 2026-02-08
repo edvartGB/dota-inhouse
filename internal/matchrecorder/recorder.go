@@ -10,18 +10,15 @@ import (
 	"github.com/edvart/dota-inhouse/internal/store"
 )
 
-// Recorder saves completed matches to the database.
 type Recorder struct {
 	store     store.Store
 	dotaAPI   *dotaapi.Client
 }
 
-// New creates a new match recorder.
 func New(s store.Store, dotaAPI *dotaapi.Client) *Recorder {
 	return &Recorder{store: s, dotaAPI: dotaAPI}
 }
 
-// Run listens for match events and records them.
 func (r *Recorder) Run(ctx context.Context, events <-chan coordinator.Event) {
 	log.Println("Match recorder started")
 	for {
@@ -48,7 +45,6 @@ func (r *Recorder) handleEvent(ctx context.Context, event coordinator.Event) {
 }
 
 func (r *Recorder) recordMatchStarted(ctx context.Context, e coordinator.MatchStarted) {
-	// Create initial match record
 	match := &store.Match{
 		ID:          e.MatchID,
 		DotaMatchID: e.DotaMatchID,
@@ -66,14 +62,12 @@ func (r *Recorder) recordMatchStarted(ctx context.Context, e coordinator.MatchSt
 func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.MatchCompleted) {
 	now := time.Now()
 
-	// Try to fetch match details from Dota API if we have a match ID
 	var winner *string
 	var duration *int
 	if e.DotaMatchID != 0 && r.dotaAPI != nil {
-		details, err := r.dotaAPI.GetMatchDetails(ctx, e.DotaMatchID)
+		details, err := r.fetchWithRetry(ctx, e.DotaMatchID)
 		if err != nil {
-			log.Printf("Match recorder: failed to fetch Dota API details for match %d: %v", e.DotaMatchID, err)
-			// Fall back to provided winner
+			log.Printf("Match recorder: failed to fetch Dota API details for match %d after retries: %v", e.DotaMatchID, err)
 			winner = e.Winner
 		} else {
 			w := details.Winner()
@@ -85,7 +79,6 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 		winner = e.Winner
 	}
 
-	// Check if match exists, create or update
 	existing, err := r.store.GetMatch(ctx, e.MatchID)
 	if err != nil {
 		log.Printf("Match recorder: failed to get match %s: %v", e.MatchID, err)
@@ -108,7 +101,6 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 			return
 		}
 	} else {
-		// Update existing match
 		existing.State = "completed"
 		existing.EndedAt = &now
 		existing.Winner = winner
@@ -120,7 +112,6 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 		}
 	}
 
-	// Record players
 	for _, p := range e.Radiant {
 		isCaptain := len(e.Radiant) > 0 && e.Radiant[0].SteamID == p.SteamID
 		mp := &store.MatchPlayer{
@@ -150,4 +141,25 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 	}
 
 	log.Printf("Match recorder: recorded completed match %s", e.MatchID[:8])
+}
+
+func (r *Recorder) fetchWithRetry(ctx context.Context, matchID uint64) (*dotaapi.MatchDetails, error) {
+	delays := []time.Duration{0, 30 * time.Second, 60 * time.Second, 120 * time.Second}
+	var lastErr error
+	for i, delay := range delays {
+		if delay > 0 {
+			log.Printf("Match recorder: retrying Dota API fetch for match %d (attempt %d/%d) in %s", matchID, i+1, len(delays), delay)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+		details, err := r.dotaAPI.GetMatchDetails(ctx, matchID)
+		if err == nil {
+			return details, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
