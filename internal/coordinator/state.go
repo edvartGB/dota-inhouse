@@ -12,10 +12,10 @@ type Player struct {
 type MatchState int
 
 const (
-	MatchStateAccepting    MatchState = iota // Waiting for players to accept
-	MatchStateDrafting                       // Captains picking players
-	MatchStateWaitingForBot                  // Bot creating Dota lobby
-	MatchStateInProgress                     // Game running
+	MatchStateAccepting     MatchState = iota // Waiting for players to accept
+	MatchStateDrafting                        // Captains picking players
+	MatchStateWaitingForBot                   // Bot creating Dota lobby
+	MatchStateInProgress                      // Game running
 )
 
 func (s MatchState) String() string {
@@ -36,8 +36,8 @@ func (s MatchState) String() string {
 type Match struct {
 	ID               string
 	State            MatchState
-	Players          []Player          // All 10 players in this match
-	AcceptedPlayers  map[string]bool   // SteamID -> accepted
+	Players          []Player        // All 10 players in this match
+	AcceptedPlayers  map[string]bool // SteamID -> accepted
 	AcceptDeadline   time.Time
 	Captains         [2]Player
 	Radiant          []Player
@@ -54,7 +54,7 @@ type LobbySettings struct {
 
 func DefaultLobbySettings() LobbySettings {
 	return LobbySettings{
-		GameMode: "cm",
+		GameMode: "cd",
 	}
 }
 
