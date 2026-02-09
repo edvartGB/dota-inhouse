@@ -251,14 +251,14 @@ func (c *Coordinator) handleMatchAcceptTimeout(cmd MatchAcceptTimeout) {
 
 	log.Printf("Match %s accept timeout", cmd.MatchID)
 
-	var failedPlayers []string
+	var failedPlayers []Player
 	var acceptedPlayers []Player
 
 	for _, p := range match.Players {
 		if match.AcceptedPlayers[p.SteamID] {
 			acceptedPlayers = append(acceptedPlayers, p)
 		} else {
-			failedPlayers = append(failedPlayers, p.SteamID)
+			failedPlayers = append(failedPlayers, p)
 			c.emit(PlayerFailedAccept{PlayerID: p.SteamID})
 		}
 	}
@@ -519,6 +519,10 @@ func (c *Coordinator) handleBotGameStarted(cmd BotGameStarted) {
 	c.emit(MatchStarted{
 		MatchID:     cmd.MatchID,
 		DotaMatchID: cmd.DotaMatchID,
+		Players:     match.Players,
+		Radiant:     match.Radiant,
+		Dire:        match.Dire,
+		Captains:    match.Captains,
 	})
 }
 

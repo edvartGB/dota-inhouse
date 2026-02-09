@@ -54,9 +54,38 @@ func (r *Recorder) recordMatchStarted(ctx context.Context, e coordinator.MatchSt
 
 	if err := r.store.CreateMatch(ctx, match); err != nil {
 		log.Printf("Match recorder: failed to create match %s: %v", e.MatchID, err)
-	} else {
-		log.Printf("Match recorder: recorded match start %s", e.MatchID[:8])
+		return
 	}
+
+	for _, p := range e.Radiant {
+		isCaptain := e.Captains[0].SteamID == p.SteamID
+		mp := &store.MatchPlayer{
+			MatchID:    e.MatchID,
+			SteamID:    p.SteamID,
+			Team:       "radiant",
+			WasCaptain: isCaptain,
+			Accepted:   true,
+		}
+		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, e.MatchID[:8], err)
+		}
+	}
+
+	for _, p := range e.Dire {
+		isCaptain := e.Captains[1].SteamID == p.SteamID
+		mp := &store.MatchPlayer{
+			MatchID:    e.MatchID,
+			SteamID:    p.SteamID,
+			Team:       "dire",
+			WasCaptain: isCaptain,
+			Accepted:   true,
+		}
+		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, e.MatchID[:8], err)
+		}
+	}
+
+	log.Printf("Match recorder: recorded match start %s with %d players", e.MatchID[:8], len(e.Radiant)+len(e.Dire))
 }
 
 func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.MatchCompleted) {
@@ -100,6 +129,8 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 			log.Printf("Match recorder: failed to create completed match %s: %v", e.MatchID, err)
 			return
 		}
+		// Players weren't recorded at start either, add them now
+		r.addMatchPlayers(ctx, e.MatchID, e.Radiant, e.Dire)
 	} else {
 		existing.State = "completed"
 		existing.EndedAt = &now
@@ -112,35 +143,32 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 		}
 	}
 
-	for _, p := range e.Radiant {
-		isCaptain := len(e.Radiant) > 0 && e.Radiant[0].SteamID == p.SteamID
-		mp := &store.MatchPlayer{
-			MatchID:    e.MatchID,
-			SteamID:    p.SteamID,
-			Team:       "radiant",
-			WasCaptain: isCaptain,
-			Accepted:   true,
-		}
-		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
-			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, e.MatchID[:8], err)
-		}
-	}
-
-	for _, p := range e.Dire {
-		isCaptain := len(e.Dire) > 0 && e.Dire[0].SteamID == p.SteamID
-		mp := &store.MatchPlayer{
-			MatchID:    e.MatchID,
-			SteamID:    p.SteamID,
-			Team:       "dire",
-			WasCaptain: isCaptain,
-			Accepted:   true,
-		}
-		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
-			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, e.MatchID[:8], err)
-		}
-	}
-
 	log.Printf("Match recorder: recorded completed match %s", e.MatchID[:8])
+}
+
+func (r *Recorder) addMatchPlayers(ctx context.Context, matchID string, radiant, dire []coordinator.Player) {
+	for _, p := range radiant {
+		mp := &store.MatchPlayer{
+			MatchID:  matchID,
+			SteamID:  p.SteamID,
+			Team:     "radiant",
+			Accepted: true,
+		}
+		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, matchID[:8], err)
+		}
+	}
+	for _, p := range dire {
+		mp := &store.MatchPlayer{
+			MatchID:  matchID,
+			SteamID:  p.SteamID,
+			Team:     "dire",
+			Accepted: true,
+		}
+		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, matchID[:8], err)
+		}
+	}
 }
 
 func (r *Recorder) fetchWithRetry(ctx context.Context, matchID uint64) (*dotaapi.MatchDetails, error) {

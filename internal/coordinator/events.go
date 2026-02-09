@@ -56,7 +56,7 @@ func (PlayerFailedAccept) event() {}
 
 type MatchCancelled struct {
 	MatchID       string
-	FailedPlayers []string
+	FailedPlayers []Player
 }
 
 func (MatchCancelled) event() {}
@@ -74,6 +74,10 @@ func (RequestBotLobby) event() {}
 type MatchStarted struct {
 	MatchID     string
 	DotaMatchID uint64
+	Players     []Player
+	Radiant     []Player
+	Dire        []Player
+	Captains    [2]Player
 }
 
 func (MatchStarted) event() {}
