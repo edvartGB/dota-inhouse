@@ -10,7 +10,6 @@ self.addEventListener('message', (event) => {
     if (event.data?.type === 'MATCH_FOUND') {
         self.registration.showNotification('DNDL Match found', {
             body: 'Click to accept your match.',
-            icon: '/static/dota-icon.png',
             tag: 'match-found'
         });
     }
