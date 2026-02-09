@@ -1,16 +1,10 @@
-let eventSource = null;
-let reconnectTimeout = null;
 let audioUnlocked = false;
-let reconnectAttempts = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
-    connectSSE();
-
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js')
             .then(reg => {
                 console.log('Service worker registered');
-                // Subscribe to push notifications after service worker is ready
                 subscribeToPush();
             });
     }
@@ -22,11 +16,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (isStandalone) {
         console.log('Running in standalone mode');
-        // Request notification permission proactively for PWA
         requestNotificationPermission();
     }
 });
 
+// Play notification sound when HTMX loads an element with data-play-notification
+document.body.addEventListener('htmx:load', function(event) {
+    if (event.detail.elt.getAttribute('data-play-notification') === 'true') {
+        playNotificationSound();
+        notifyMatchFound();
+    }
+});
 
 const notificationAudio = new Audio('/static/faceit_trumpet.mp3');
 notificationAudio.load();
@@ -82,77 +82,6 @@ function playNotificationSound() {
     });
 }
 
-function connectSSE() {
-    if (eventSource) {
-        eventSource.close();
-    }
-
-    eventSource = new EventSource('/events');
-
-    eventSource.onopen = () => {
-        console.log('SSE connected');
-        reconnectAttempts = 0;
-        if (reconnectTimeout) {
-            clearTimeout(reconnectTimeout);
-            reconnectTimeout = null;
-        }
-    };
-
-
-    eventSource.onmessage = (event) => {
-        const container = document.createElement('div');
-        container.innerHTML = event.data;
-
-        container.querySelectorAll('[hx-swap-oob]').forEach(el => {
-            const targetId = el.id;
-            const target = document.getElementById(targetId);
-
-            if (el.dataset.playNotification === 'true') {
-                playNotificationSound();
-                notifyMatchFound();
-            }
-
-            if (target) {
-                target.replaceWith(el);
-            } else {
-                document.body.appendChild(el);
-            }
-            el.removeAttribute('hx-swap-oob');
-
-            if (typeof htmx !== 'undefined') {
-                htmx.process(el);
-            }
-        });
-    };
-
-    eventSource.onerror = (err) => {
-        console.error('SSE error:', err);
-        eventSource.close();
-
-        reconnectAttempts++;
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
-
-        console.log(`SSE disconnected. Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`);
-
-        reconnectTimeout = setTimeout(() => {
-            connectSSE();
-        }, delay);
-    };
-}
-
-// Connect SSE when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    connectSSE();
-});
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-    if (eventSource) {
-        eventSource.close();
-    }
-});
-
-
 function notifyMatchFound() {
     console.log('notifyMatchFound called, permission:', Notification.permission);
 
@@ -163,7 +92,6 @@ function notifyMatchFound() {
 
     if (Notification.permission !== 'granted') {
         console.warn('Notification permission not granted. Current:', Notification.permission);
-        // Try to request permission again
         requestNotificationPermission();
         return;
     }
@@ -263,11 +191,11 @@ async function sendSubscriptionToServer(subscription) {
             return true;
         } else {
             const text = await response.text();
-            console.error('❌ Failed to send subscription to server:', response.status, text);
+            console.error('Failed to send subscription to server:', response.status, text);
             return false;
         }
     } catch (error) {
-        console.error('❌ Error sending subscription to server:', error);
+        console.error('Error sending subscription to server:', error);
         return false;
     }
 }
@@ -309,11 +237,11 @@ async function testPushNotification() {
             alert('Test notification sent! Check if you received it.');
         } else {
             const text = await response.text();
-            console.error('❌ Failed to send test notification:', response.status, text);
+            console.error('Failed to send test notification:', response.status, text);
             alert(`Failed to send test notification: ${response.status} ${text}`);
         }
     } catch (error) {
-        console.error('❌ Error testing push notification:', error);
+        console.error('Error testing push notification:', error);
         alert(`Error: ${error.message}`);
     }
 }
@@ -321,25 +249,25 @@ async function testPushNotification() {
 // Check push notification status (for debugging)
 async function checkPushStatus() {
     console.log('=== Push Notification Status ===');
-    console.log('🔔 Notification permission:', Notification.permission);
-    console.log('🔧 Service Worker support:', 'serviceWorker' in navigator);
-    console.log('📬 Push Manager support:', 'PushManager' in window);
+    console.log('Notification permission:', Notification.permission);
+    console.log('Service Worker support:', 'serviceWorker' in navigator);
+    console.log('Push Manager support:', 'PushManager' in window);
 
     if ('serviceWorker' in navigator) {
         try {
             const registration = await navigator.serviceWorker.ready;
-            console.log('✅ Service Worker active:', !!registration.active);
+            console.log('Service Worker active:', !!registration.active);
 
             const subscription = await registration.pushManager.getSubscription();
             if (subscription) {
-                console.log('✅ Push subscription exists');
+                console.log('Push subscription exists');
                 console.log('   Endpoint:', subscription.endpoint.substring(0, 60) + '...');
                 console.log('   ExpirationTime:', subscription.expirationTime || 'Never');
             } else {
-                console.log('❌ No push subscription found');
+                console.log('No push subscription found');
             }
         } catch (error) {
-            console.error('❌ Error checking service worker:', error);
+            console.error('Error checking service worker:', error);
         }
     }
     console.log('================================');
