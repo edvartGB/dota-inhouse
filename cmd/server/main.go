@@ -18,6 +18,7 @@ import (
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 	"github.com/edvart/dota-inhouse/internal/dotaapi"
 	"github.com/edvart/dota-inhouse/internal/matchrecorder"
+	"github.com/edvart/dota-inhouse/internal/push"
 	"github.com/edvart/dota-inhouse/internal/store"
 	"github.com/edvart/dota-inhouse/internal/web"
 )
@@ -54,6 +55,11 @@ func main() {
 
 	// Admin Steam IDs (comma-separated)
 	adminSteamIDs := getEnv("ADMIN_STEAM_IDS", "")
+
+	// Web Push VAPID keys
+	vapidPublicKey := getEnv("VAPID_PUBLIC_KEY", "")
+	vapidPrivateKey := getEnv("VAPID_PRIVATE_KEY", "")
+	vapidSubject := getEnv("VAPID_SUBJECT", "mailto:noreply@example.com")
 
 	// Configurable max players
 	if maxPlayersStr := getEnv("MAX_PLAYERS", ""); maxPlayersStr != "" {
@@ -113,10 +119,25 @@ func main() {
 	staticDir := filepath.Join(projectRoot, "web", "static")
 	staticFS := os.DirFS(staticDir)
 
+	// Initialize push notification service
+	var pushService *push.Service
+	if vapidPublicKey != "" && vapidPrivateKey != "" {
+		pushService = push.NewService(db, push.Config{
+			VAPIDPublicKey:  vapidPublicKey,
+			VAPIDPrivateKey: vapidPrivateKey,
+			VAPIDSubject:    vapidSubject,
+		})
+		log.Println("Web Push notifications enabled")
+	} else {
+		log.Println("Warning: VAPID keys not set. Web Push notifications will not work.")
+		log.Println("Run 'go run cmd/generate-vapid/main.go' to generate keys")
+	}
+
 	// Initialize web server
 	server := web.NewServer(coord, steamAuth, sessions, db, templates, staticFS, web.Config{
 		DevMode:       devMode,
 		AdminSteamIDs: adminSteamIDs,
+		PushService:   pushService,
 	})
 
 	// Create context for graceful shutdown
@@ -142,6 +163,14 @@ func main() {
 	recorder := matchrecorder.New(db, dotaAPIClient)
 	recorderEvents := coord.Subscribe()
 	go recorder.Run(ctx, recorderEvents)
+
+	// Start push notifier if push service is enabled
+	if pushService != nil {
+		pushNotifier := push.NewNotifier(pushService)
+		pushEvents := coord.Subscribe()
+		go pushNotifier.Run(ctx, pushEvents)
+		log.Println("Push notifier started")
+	}
 
 	// Start session cleanup job (runs every hour)
 	go func() {

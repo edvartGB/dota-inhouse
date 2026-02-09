@@ -70,6 +70,12 @@ type Store interface {
 
 	GetLeaderboard(ctx context.Context, startDate, endDate *time.Time) ([]LeaderboardEntry, error)
 
+	// Push subscriptions
+	SavePushSubscription(ctx context.Context, sub *PushSubscription) error
+	GetPushSubscriptions(ctx context.Context, steamID string) ([]PushSubscription, error)
+	GetAllPushSubscriptions(ctx context.Context) ([]PushSubscription, error)
+	DeletePushSubscription(ctx context.Context, endpoint string) error
+
 	Close() error
 }
 
@@ -90,4 +96,13 @@ type LeaderboardEntry struct {
 	Total     int
 	WinRate   float64
 	Streak    int // Positive = win streak, negative = loss streak
+}
+
+type PushSubscription struct {
+	ID        int
+	SteamID   string
+	Endpoint  string
+	P256dh    string
+	Auth      string
+	CreatedAt time.Time
 }

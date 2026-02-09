@@ -9,6 +9,7 @@ import (
 
 	"github.com/edvart/dota-inhouse/internal/auth"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/push"
 	"github.com/edvart/dota-inhouse/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -24,11 +25,13 @@ type Server struct {
 	templates   *template.Template
 	devMode     bool
 	adminConfig *auth.AdminConfig
+	pushService *push.Service
 }
 
 type Config struct {
 	DevMode       bool
 	AdminSteamIDs string // Comma-separated list of admin Steam IDs
+	PushService   *push.Service
 }
 
 func NewServer(
@@ -50,6 +53,7 @@ func NewServer(
 		templates:   templates,
 		devMode:     cfg.DevMode,
 		adminConfig: auth.NewAdminConfig(cfg.AdminSteamIDs),
+		pushService: cfg.PushService,
 	}
 
 	s.setupRoutes(staticFS)
@@ -76,6 +80,17 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		w.Write(data)
 	})
 
+	r.Get("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
+		data, err := fs.ReadFile(staticFS, "manifest.json")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/manifest+json")
+		w.Write(data)
+	})
+
 	r.Get("/auth/login", s.steamAuth.LoginHandler)
 	r.Get("/auth/callback", s.steamAuth.CallbackHandler)
 	r.Get("/auth/logout", s.steamAuth.LogoutHandler)
@@ -93,6 +108,9 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 
 	r.Get("/events", s.handleSSE)
 
+	// Push notification endpoints
+	r.Get("/api/push/vapid-public-key", s.handleGetVAPIDPublicKey)
+
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(s.sessions))
 
@@ -100,6 +118,11 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Post("/queue/leave", s.handleLeaveQueue)
 		r.Post("/match/{matchID}/accept", s.handleAcceptMatch)
 		r.Post("/match/{matchID}/pick/{playerID}", s.handlePickPlayer)
+
+		// Push subscription management
+		r.Post("/api/push/subscribe", s.handleSubscribePush)
+		r.Post("/api/push/unsubscribe", s.handleUnsubscribePush)
+		r.Post("/api/push/test", s.handleTestPush)
 	})
 
 	r.Get("/", s.handleIndex)

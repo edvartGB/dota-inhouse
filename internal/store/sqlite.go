@@ -66,6 +66,15 @@ func (s *SQLiteStore) migrate() error {
 			accepted INTEGER DEFAULT 0,
 			PRIMARY KEY (match_id, steam_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS push_subscriptions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			steam_id TEXT NOT NULL REFERENCES users(steam_id),
+			endpoint TEXT NOT NULL UNIQUE,
+			p256dh TEXT NOT NULL,
+			auth TEXT NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_push_subs_steam_id ON push_subscriptions(steam_id)`,
 	}
 
 	for _, m := range migrations {
@@ -448,4 +457,69 @@ func (s *SQLiteStore) ListMatchesWithPlayers(ctx context.Context, limit int) ([]
 	}
 
 	return result, nil
+}
+
+// Push Subscription methods
+
+func (s *SQLiteStore) SavePushSubscription(ctx context.Context, sub *PushSubscription) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO push_subscriptions (steam_id, endpoint, p256dh, auth)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(endpoint) DO UPDATE SET
+		 steam_id = excluded.steam_id,
+		 p256dh = excluded.p256dh,
+		 auth = excluded.auth`,
+		sub.SteamID, sub.Endpoint, sub.P256dh, sub.Auth,
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetPushSubscriptions(ctx context.Context, steamID string) ([]PushSubscription, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, steam_id, endpoint, p256dh, auth, created_at
+		 FROM push_subscriptions WHERE steam_id = ?`,
+		steamID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subs []PushSubscription
+	for rows.Next() {
+		var sub PushSubscription
+		if err := rows.Scan(&sub.ID, &sub.SteamID, &sub.Endpoint, &sub.P256dh, &sub.Auth, &sub.CreatedAt); err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+
+	return subs, rows.Err()
+}
+
+func (s *SQLiteStore) GetAllPushSubscriptions(ctx context.Context) ([]PushSubscription, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, steam_id, endpoint, p256dh, auth, created_at
+		 FROM push_subscriptions`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subs []PushSubscription
+	for rows.Next() {
+		var sub PushSubscription
+		if err := rows.Scan(&sub.ID, &sub.SteamID, &sub.Endpoint, &sub.P256dh, &sub.Auth, &sub.CreatedAt); err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+
+	return subs, rows.Err()
+}
+
+func (s *SQLiteStore) DeletePushSubscription(ctx context.Context, endpoint string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE endpoint = ?`, endpoint)
+	return err
 }

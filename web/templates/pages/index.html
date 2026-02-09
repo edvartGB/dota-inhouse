@@ -58,6 +58,9 @@
                 <button hx-post="/dev/add-fake-players" hx-swap="none" class="btn btn-secondary">
                     Add 9 Fake Players
                 </button>
+                <button onclick="testPushNotification()" class="btn btn-secondary">
+                    🔔 Test Push Notification
+                </button>
                 {{if .Match}}
                 <div class="dev-match-tools">
                     <p>Match: {{slice .Match.ID 0 8}}...</p>
