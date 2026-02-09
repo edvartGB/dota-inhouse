@@ -121,6 +121,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		data := struct {
 			MatchID      string
 			Players      []coordinator.Player
+			Accepted     map[string]bool
 			Deadline     string
 			Count        int
 			Total        int
@@ -129,6 +130,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}{
 			MatchID:      e.MatchID,
 			Players:      e.Players,
+			Accepted:     make(map[string]bool),
 			Deadline:     e.Deadline.Format("2006-01-02T15:04:05Z"),
 			Count:        0,
 			Total:        coordinator.MaxPlayers,
@@ -149,6 +151,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		userAccepted := e.Accepted[userID]
 		data := struct {
 			MatchID      string
+			Players      []coordinator.Player
 			Accepted     map[string]bool
 			Count        int
 			Total        int
@@ -156,6 +159,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			UserAccepted bool
 		}{
 			MatchID:      e.MatchID,
+			Players:      match.Players,
 			Accepted:     e.Accepted,
 			Count:        len(e.Accepted),
 			Total:        coordinator.MaxPlayers,

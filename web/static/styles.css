@@ -347,6 +347,39 @@ main {
     transition: width 0.3s;
 }
 
+.accept-player-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+    text-align: left;
+}
+
+.accept-player {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    transition: opacity 0.3s;
+}
+
+.accept-player.accepted {
+    opacity: 1;
+    color: var(--text-primary);
+}
+
+.accept-check {
+    margin-left: auto;
+    color: #4caf50;
+    font-weight: bold;
+}
+
 /* Match Status */
 .match-status {
     background: var(--bg-secondary);

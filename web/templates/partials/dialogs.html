@@ -41,6 +41,17 @@
     <div class="progress-bar">
         <div class="progress" style="width: {{percent .Count .Total}}%"></div>
     </div>
+    {{if .Players}}
+    <ul class="accept-player-list">
+        {{range .Players}}
+        <li class="accept-player {{if index $.Accepted .SteamID}}accepted{{end}}">
+            {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small">{{end}}
+            <span>{{.Name}}</span>
+            {{if index $.Accepted .SteamID}}<span class="accept-check">&#10003;</span>{{end}}
+        </li>
+        {{end}}
+    </ul>
+    {{end}}
 </div>
 {{end}}
 
