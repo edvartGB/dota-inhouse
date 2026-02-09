@@ -49,6 +49,9 @@
     <div class="notification error">
         <h3>Match Cancelled</h3>
         <p>Not all players accepted in time.</p>
+        {{if gt (len .FailedPlayers) 0}}
+        <p class="failed-players">Did not accept: {{range $i, $p := .FailedPlayers}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</p>
+        {{end}}
     </div>
 </div>
 {{end}}
