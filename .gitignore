@@ -9,5 +9,3 @@ set_env.sh
 data/inhouse.log
 data/inhouse.db
 data/vapid_keys.env
-
-inhouse.db
