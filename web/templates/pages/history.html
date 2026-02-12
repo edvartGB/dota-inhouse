@@ -43,6 +43,22 @@
                 {{else}}
                     <span class="match-winner unknown">No Result</span>
                 {{end}}
+                {{if $.IsAdmin}}
+                <span class="admin-set-winner">
+                    <button class="btn btn-small" style="background: var(--accent-radiant); color: #fff; padding: 0.2rem 0.5rem; font-size: 0.75rem;"
+                        hx-post="/admin/history/{{.ID}}/result/radiant"
+                        hx-swap="none"
+                        hx-confirm="Set Radiant as winner?">
+                        Radiant Win
+                    </button>
+                    <button class="btn btn-small" style="background: var(--accent-dire); color: #fff; padding: 0.2rem 0.5rem; font-size: 0.75rem;"
+                        hx-post="/admin/history/{{.ID}}/result/dire"
+                        hx-swap="none"
+                        hx-confirm="Set Dire as winner?">
+                        Dire Win
+                    </button>
+                </span>
+                {{end}}
                 {{$duration := formatDuration .Duration}}
                 {{if $duration}}
                     <span class="match-duration">{{$duration}}</span>
@@ -92,6 +108,13 @@
 </div>
     </main>
 
+    <script>
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful) {
+                setTimeout(function() { window.location.reload(); }, 500);
+            }
+        });
+    </script>
     <script src="/static/app.js"></script>
 </body>
 </html>

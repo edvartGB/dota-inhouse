@@ -139,6 +139,7 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Post("/admin/queue/kick/{playerID}", s.handleAdminKickPlayer)
 		r.Post("/admin/player/{playerID}/priority/{priority}", s.handleAdminSetCaptainPriority)
 		r.Post("/admin/settings", s.handleAdminSetLobbySettings)
+		r.Post("/admin/history/{matchID}/result/{winner}", s.handleAdminSetHistoryResult)
 	})
 }
 
@@ -198,6 +199,7 @@ type HistoryPageData struct {
 	User    interface{}
 	Matches []store.MatchWithPlayers
 	DevMode bool
+	IsAdmin bool
 }
 
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
@@ -210,10 +212,16 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isAdmin := false
+	if user != nil {
+		isAdmin = s.adminConfig.IsAdmin(user.SteamID)
+	}
+
 	data := HistoryPageData{
 		User:    user,
 		Matches: matches,
 		DevMode: s.devMode,
+		IsAdmin: isAdmin,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "history.html", data); err != nil {

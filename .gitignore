@@ -9,3 +9,7 @@ set_env.sh
 data/inhouse.log
 data/inhouse.db
 data/vapid_keys.env
+
+bin
+
+dota-inhouse.service

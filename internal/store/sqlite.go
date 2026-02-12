@@ -237,6 +237,23 @@ func (s *SQLiteStore) GetMatch(ctx context.Context, matchID string) (*Match, err
 	return &match, nil
 }
 
+func (s *SQLiteStore) SetMatchWinner(ctx context.Context, matchID string, winner string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE matches SET winner = ? WHERE id = ?`,
+		winner, matchID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("match not found")
+	}
+	return nil
+}
+
 func (s *SQLiteStore) AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO match_players (match_id, steam_id, team, was_captain, accepted)

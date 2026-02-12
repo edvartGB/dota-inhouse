@@ -90,6 +90,28 @@ func (s *Server) handleAdminSetResult(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleAdminSetHistoryResult sets the winner of a completed match in the database.
+func (s *Server) handleAdminSetHistoryResult(w http.ResponseWriter, r *http.Request) {
+	matchID := chi.URLParam(r, "matchID")
+	if matchID == "" {
+		http.Error(w, "match ID required", http.StatusBadRequest)
+		return
+	}
+
+	winner := chi.URLParam(r, "winner")
+	if winner != "radiant" && winner != "dire" {
+		http.Error(w, "winner must be 'radiant' or 'dire'", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.SetMatchWinner(r.Context(), matchID, winner); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleAdminKickPlayer kicks a player from the queue.
 func (s *Server) handleAdminKickPlayer(w http.ResponseWriter, r *http.Request) {
 	playerID := chi.URLParam(r, "playerID")

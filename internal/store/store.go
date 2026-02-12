@@ -61,6 +61,7 @@ type Store interface {
 	CreateMatch(ctx context.Context, match *Match) error
 	UpdateMatch(ctx context.Context, match *Match) error
 	GetMatch(ctx context.Context, matchID string) (*Match, error)
+	SetMatchWinner(ctx context.Context, matchID string, winner string) error
 
 	AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error
 	GetMatchPlayers(ctx context.Context, matchID string) ([]MatchPlayer, error)
