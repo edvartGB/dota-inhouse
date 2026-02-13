@@ -96,6 +96,20 @@
             color: var(--text-primary);
             width: 60px;
         }
+        .log-output {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.75rem;
+            font-family: monospace;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            overflow-x: auto;
+            white-space: pre;
+            max-height: 300px;
+            overflow-y: auto;
+            color: var(--text-secondary);
+        }
         @media (max-width: 768px) {
             .admin-table { font-size: 0.85rem; }
             .admin-table th, .admin-table td { padding: 0.5rem; }
@@ -121,6 +135,25 @@
 
     <main>
         <div class="container">
+
+            <div class="admin-section">
+                <h3>Quick Actions</h3>
+                <div class="admin-actions">
+                    <a href="/admin" class="btn btn-secondary">Refresh State</a>
+                    <a href="/admin/state" class="btn btn-secondary" target="_blank">View JSON State</a>
+                    <a href="/admin/logs" class="btn btn-secondary">View Logs</a>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Recent Logs</h3>
+                {{if .LogLines}}
+                <div class="log-output" id="log-output">{{range .LogLines}}{{.}}
+{{end}}</div>
+                {{else}}
+                <p class="empty-state">No log lines available.</p>
+                {{end}}
+            </div>
 
             <div class="admin-section">
                 <h3>Lobby Settings</h3>
@@ -292,14 +325,6 @@
                 {{end}}
             </div>
 
-            <div class="admin-section">
-                <h3>Quick Actions</h3>
-                <div class="admin-actions">
-                    <a href="/admin" class="btn btn-secondary">Refresh State</a>
-                    <a href="/admin/state" class="btn btn-secondary" target="_blank">View JSON State</a>
-                    <a href="/admin/logs" class="btn btn-secondary">View Logs</a>
-                </div>
-            </div>
         </div>
     </main>
 
@@ -312,6 +337,9 @@
                 }, 500);
             }
         });
+
+        var logEl = document.getElementById('log-output');
+        if (logEl) logEl.scrollTop = logEl.scrollHeight;
 
         function setPriority(steamId, priority) {
             fetch('/admin/player/' + steamId + '/priority/' + priority, { method: 'POST' })

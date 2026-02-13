@@ -31,6 +31,7 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 		"LobbySettings":  lobbySettings,
 		"ValidGameModes": coordinator.ValidGameModes,
 		"IsAdmin":        true,
+		"LogLines":       s.readLogTail(50),
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "admin.html", data); err != nil {
@@ -201,26 +202,7 @@ func (s *Server) handleAdminLogs(w http.ResponseWriter, r *http.Request) {
 		maxLines = n
 	}
 
-	var lines []string
-	if s.logPath != "" {
-		f, err := os.Open(s.logPath)
-		if err != nil {
-			log.Printf("Failed to open log file: %v", err)
-		} else {
-			defer f.Close()
-			scanner := bufio.NewScanner(f)
-			scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
-			var all []string
-			for scanner.Scan() {
-				all = append(all, scanner.Text())
-			}
-			// Keep last N lines
-			if len(all) > maxLines {
-				all = all[len(all)-maxLines:]
-			}
-			lines = all
-		}
-	}
+	lines := s.readLogTail(maxLines)
 
 	data := map[string]interface{}{
 		"User":     user,
@@ -232,6 +214,28 @@ func (s *Server) handleAdminLogs(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Template error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+// readLogTail returns the last n lines from the log file.
+func (s *Server) readLogTail(n int) []string {
+	if s.logPath == "" {
+		return nil
+	}
+	f, err := os.Open(s.logPath)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
+	var all []string
+	for scanner.Scan() {
+		all = append(all, scanner.Text())
+	}
+	if len(all) > n {
+		all = all[len(all)-n:]
+	}
+	return all
 }
 
 // handleAdminState returns the current state as JSON.

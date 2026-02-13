@@ -405,6 +405,30 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 		CurrentPicker:    match.CurrentPicker,
 	})
 
+	// Auto-assign last remaining player
+	if len(match.AvailablePlayers) == 1 {
+		last := match.AvailablePlayers[0]
+		match.AvailablePlayers = nil
+		if match.CurrentPicker == 0 {
+			match.Radiant = append(match.Radiant, last)
+		} else {
+			match.Dire = append(match.Dire, last)
+		}
+		log.Printf("Auto-assigned last player %s to %s",
+			last.Name, map[int]string{0: "Radiant", 1: "Dire"}[match.CurrentPicker])
+		match.PickCount++
+		match.CurrentPicker = getPickerForPickCount(match.PickCount)
+
+		c.emit(DraftUpdated{
+			MatchID:          match.ID,
+			Captains:         match.Captains,
+			AvailablePlayers: match.AvailablePlayers,
+			Radiant:          match.Radiant,
+			Dire:             match.Dire,
+			CurrentPicker:    match.CurrentPicker,
+		})
+	}
+
 	if len(match.AvailablePlayers) == 0 {
 		c.completeDraft(match)
 	} else {
