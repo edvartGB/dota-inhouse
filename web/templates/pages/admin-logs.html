@@ -1,0 +1,103 @@
+{{define "admin-logs.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Logs - Dota Inhouse</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .logs-section {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .logs-header h3 {
+            color: var(--accent-primary);
+            margin: 0;
+        }
+        .logs-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .log-output {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: var(--text-primary);
+        }
+        .empty-state {
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 1rem;
+        }
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Server Logs</h1>
+        <nav>
+            <a href="/" class="nav-link">Queue</a>
+            <a href="/history" class="nav-link">History</a>
+            <a href="/leaderboard" class="nav-link">Leaderboard</a>
+            <a href="/admin" class="nav-link">Admin</a>
+            {{if .User}}
+                <span class="user-info">{{.User.Name}}</span>
+                <a href="/auth/logout" class="btn btn-secondary">Logout</a>
+            {{end}}
+        </nav>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="logs-section">
+                <div class="logs-header">
+                    <h3>Last {{.MaxLines}} lines</h3>
+                    <div class="logs-actions">
+                        <a href="/admin/logs?lines=100" class="btn btn-secondary btn-small">100</a>
+                        <a href="/admin/logs?lines=200" class="btn btn-secondary btn-small">200</a>
+                        <a href="/admin/logs?lines=500" class="btn btn-secondary btn-small">500</a>
+                        <a href="/admin/logs?lines=1000" class="btn btn-secondary btn-small">1000</a>
+                        <a href="/admin/logs?lines={{.MaxLines}}" class="btn btn-primary btn-small">Refresh</a>
+                    </div>
+                </div>
+                {{if .Lines}}
+                <div class="log-output" id="log-output">{{range .Lines}}{{.}}
+{{end}}</div>
+                {{else}}
+                <p class="empty-state">No log lines available.</p>
+                {{end}}
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Auto-scroll to bottom
+        var el = document.getElementById('log-output');
+        if (el) el.scrollTop = el.scrollHeight;
+    </script>
+</body>
+</html>
+{{end}}

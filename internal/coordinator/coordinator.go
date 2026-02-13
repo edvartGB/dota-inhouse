@@ -21,10 +21,11 @@ const (
 
 // Coordinator owns all mutable state and processes commands sequentially.
 type Coordinator struct {
-	commands    chan Command
-	events      chan Event
-	subscribers []chan Event
-	state       *State
+	commands     chan Command
+	events       chan Event
+	subscribers  []chan Event
+	state        *State
+	persistQueue func([]Player)
 }
 
 func New() *Coordinator {
@@ -33,6 +34,22 @@ func New() *Coordinator {
 		events:      make(chan Event, 100),
 		subscribers: make([]chan Event, 0),
 		state:       NewState(),
+	}
+}
+
+// SetQueuePersistence sets a callback that is called whenever the queue changes.
+func (c *Coordinator) SetQueuePersistence(fn func([]Player)) {
+	c.persistQueue = fn
+}
+
+// RestoreQueue sets the initial queue state. Must be called before Run.
+func (c *Coordinator) RestoreQueue(players []Player) {
+	c.state.Queue = players
+}
+
+func (c *Coordinator) saveQueue() {
+	if c.persistQueue != nil {
+		c.persistQueue(c.state.Queue)
 	}
 }
 
@@ -56,6 +73,17 @@ func (c *Coordinator) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			log.Println("Coordinator shutting down")
+			// Return players from non-in-progress matches to queue before saving
+			for _, match := range c.state.Matches {
+				if match.State != MatchStateInProgress {
+					for _, p := range match.Players {
+						if !c.state.IsPlayerInQueue(p.SteamID) {
+							c.state.Queue = append(c.state.Queue, p)
+						}
+					}
+				}
+			}
+			c.saveQueue()
 			return
 		case cmd := <-c.commands:
 			c.handleCommand(cmd)
@@ -64,6 +92,10 @@ func (c *Coordinator) Run(ctx context.Context) {
 }
 
 func (c *Coordinator) emit(e Event) {
+	if _, ok := e.(QueueUpdated); ok {
+		c.saveQueue()
+	}
+
 	select {
 	case c.events <- e:
 	default:

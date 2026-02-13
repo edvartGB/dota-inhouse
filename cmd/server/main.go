@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -29,11 +30,13 @@ func main() {
 	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
 		log.Fatalf("Failed to create log directory: %v", err)
 	}
+	rotateLogFile(logPath, 10*1024*1024) // rotate at 10MB
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		log.Fatalf("Failed to open log file: %v", err)
 	}
 	defer logFile.Close()
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
 
 	// Configuration from environment
@@ -96,6 +99,18 @@ func main() {
 	// Initialize coordinator
 	coord := coordinator.New()
 
+	// Restore queue from disk and set up persistence
+	queuePath := filepath.Join(filepath.Dir(dbPath), "queue.json")
+	if savedQueue := loadQueue(queuePath, db); len(savedQueue) > 0 {
+		coord.RestoreQueue(savedQueue)
+		log.Printf("Restored %d players to queue from %s", len(savedQueue), queuePath)
+	}
+	coord.SetQueuePersistence(func(queue []coordinator.Player) {
+		if err := saveQueue(queuePath, queue); err != nil {
+			log.Printf("Failed to save queue: %v", err)
+		}
+	})
+
 	// Initialize auth
 	sessions := auth.NewSessionManager(db)
 	steamAuth := auth.NewSteamAuth(steamAPIKey, baseURL, db, sessions)
@@ -138,6 +153,7 @@ func main() {
 		DevMode:       devMode,
 		AdminSteamIDs: adminSteamIDs,
 		PushService:   pushService,
+		LogPath:       logPath,
 	})
 
 	// Create context for graceful shutdown
@@ -267,6 +283,56 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// rotateLogFile renames the log file to .old if it exceeds maxBytes.
+// Keeps one backup only. Errors are non-fatal (logged to stderr).
+func rotateLogFile(path string, maxBytes int64) {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() < maxBytes {
+		return
+	}
+	oldPath := path + ".old"
+	os.Remove(oldPath)
+	if err := os.Rename(path, oldPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Log rotation failed: %v\n", err)
+	}
+}
+
+// loadQueue reads the saved queue from a JSON file and refreshes player data from the DB.
+func loadQueue(path string, db store.Store) []coordinator.Player {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var players []coordinator.Player
+	if err := json.Unmarshal(data, &players); err != nil {
+		log.Printf("Failed to parse queue file: %v", err)
+		return nil
+	}
+	// Refresh player data from DB (name/avatar/priority may have changed)
+	var result []coordinator.Player
+	for _, p := range players {
+		user, err := db.GetUser(context.Background(), p.SteamID)
+		if err != nil || user == nil {
+			continue // User no longer exists
+		}
+		result = append(result, coordinator.Player{
+			SteamID:         user.SteamID,
+			Name:            user.Name,
+			AvatarURL:       user.AvatarURL,
+			CaptainPriority: user.CaptainPriority,
+		})
+	}
+	return result
+}
+
+func saveQueue(path string, queue []coordinator.Player) error {
+	data, err := json.Marshal(queue)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
 }
 
 func findProjectRoot() string {

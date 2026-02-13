@@ -26,12 +26,14 @@ type Server struct {
 	devMode     bool
 	adminConfig *auth.AdminConfig
 	pushService *push.Service
+	logPath     string
 }
 
 type Config struct {
 	DevMode       bool
 	AdminSteamIDs string // Comma-separated list of admin Steam IDs
 	PushService   *push.Service
+	LogPath       string
 }
 
 func NewServer(
@@ -54,6 +56,7 @@ func NewServer(
 		devMode:     cfg.DevMode,
 		adminConfig: auth.NewAdminConfig(cfg.AdminSteamIDs),
 		pushService: cfg.PushService,
+		logPath:     cfg.LogPath,
 	}
 
 	s.setupRoutes(staticFS)
@@ -140,6 +143,7 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Post("/admin/player/{playerID}/priority/{priority}", s.handleAdminSetCaptainPriority)
 		r.Post("/admin/settings", s.handleAdminSetLobbySettings)
 		r.Post("/admin/history/{matchID}/result/{winner}", s.handleAdminSetHistoryResult)
+		r.Get("/admin/logs", s.handleAdminLogs)
 	})
 }
 

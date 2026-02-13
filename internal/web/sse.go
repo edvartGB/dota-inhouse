@@ -459,17 +459,20 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 
 	h.mu.Lock()
 	h.clients[client] = true
+	clientCount := len(h.clients)
 	h.mu.Unlock()
 
-	//log.Printf("SSE client connected: %s (user: %s)", client.ID, userID)
+	// SSE connect/disconnect logged only at high volume for debugging
+	_ = clientCount
 
 	// Ensure cleanup on disconnect
 	defer func() {
 		h.mu.Lock()
 		delete(h.clients, client)
+		clientCount := len(h.clients)
 		h.mu.Unlock()
 		close(client.Channel)
-		//log.Printf("SSE client disconnected: %s", client.ID)
+		_ = clientCount
 	}()
 
 	flusher, ok := w.(http.Flusher)

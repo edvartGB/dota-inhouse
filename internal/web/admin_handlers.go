@@ -1,9 +1,11 @@
 package web
 
 import (
+	"bufio"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/edvart/dota-inhouse/internal/auth"
@@ -58,6 +60,7 @@ func (s *Server) handleAdminCancelMatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	log.Printf("Admin cancelled match %s (requeue=%v)", matchID[:8], returnToQueue)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -87,6 +90,7 @@ func (s *Server) handleAdminSetResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Admin set active match %s result: %s wins", matchID[:8], winner)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -109,6 +113,7 @@ func (s *Server) handleAdminSetHistoryResult(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	log.Printf("Admin set history match %s result: %s wins", matchID[:8], winner)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -131,6 +136,7 @@ func (s *Server) handleAdminKickPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Admin kicked player %s from queue", playerID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -184,6 +190,48 @@ func (s *Server) handleAdminSetLobbySettings(w http.ResponseWriter, r *http.Requ
 	}
 
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}
+
+// handleAdminLogs renders the last N lines of the log file.
+func (s *Server) handleAdminLogs(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+
+	maxLines := 200
+	if n, err := strconv.Atoi(r.URL.Query().Get("lines")); err == nil && n > 0 && n <= 1000 {
+		maxLines = n
+	}
+
+	var lines []string
+	if s.logPath != "" {
+		f, err := os.Open(s.logPath)
+		if err != nil {
+			log.Printf("Failed to open log file: %v", err)
+		} else {
+			defer f.Close()
+			scanner := bufio.NewScanner(f)
+			scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
+			var all []string
+			for scanner.Scan() {
+				all = append(all, scanner.Text())
+			}
+			// Keep last N lines
+			if len(all) > maxLines {
+				all = all[len(all)-maxLines:]
+			}
+			lines = all
+		}
+	}
+
+	data := map[string]interface{}{
+		"User":     user,
+		"Lines":    lines,
+		"MaxLines": maxLines,
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "admin-logs.html", data); err != nil {
+		log.Printf("Template error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 // handleAdminState returns the current state as JSON.

@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -46,6 +47,7 @@ func (s *Server) handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Player %s (%s) joined queue", user.Name, user.SteamID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -67,6 +69,7 @@ func (s *Server) handleLeaveQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Player %s (%s) left queue", user.Name, user.SteamID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -95,6 +98,7 @@ func (s *Server) handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Player %s (%s) accepted match %s", user.Name, user.SteamID, matchID[:8])
 	w.WriteHeader(http.StatusNoContent)
 }
 
