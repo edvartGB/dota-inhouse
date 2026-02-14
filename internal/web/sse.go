@@ -189,6 +189,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			AvailablePlayers: e.Available,
 			CurrentPicker:    0,
 			DevMode:          h.devMode,
+			Deadline:         e.Deadline.Format("2006-01-02T15:04:05Z"),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
 			log.Printf("Failed to render draft: %v", err)
@@ -208,6 +209,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			Dire:             e.Dire,
 			CurrentPicker:    e.CurrentPicker,
 			DevMode:          h.devMode,
+			Deadline:         e.Deadline.Format("2006-01-02T15:04:05Z"),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
 			log.Printf("Failed to render draft: %v", err)
@@ -288,11 +290,13 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		data := struct {
-			MatchID string
-			Message string
+			MatchID  string
+			Message  string
+			Deadline string
 		}{
-			MatchID: e.MatchID,
-			Message: "Waiting for Dota 2 lobby...",
+			MatchID:  e.MatchID,
+			Message:  "Waiting for Dota 2 lobby...",
+			Deadline: e.Deadline.Format("2006-01-02T15:04:05Z"),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
 			log.Printf("Failed to render waiting: %v", err)
@@ -379,6 +383,7 @@ type DraftData struct {
 	Dire             []coordinator.Player
 	CurrentPicker    int
 	DevMode          bool
+	Deadline         string
 }
 
 func (h *SSEHub) renderInitialState(userID string) string {

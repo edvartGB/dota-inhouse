@@ -17,7 +17,7 @@
                         <div id="accept-dialog" class="dialog-overlay">
                             <div class="dialog">
                                 <h3>Match Found!</h3>
-                                <!-- <p>A match has been found. Accept to join the draft.</p> -->
+                                <div class="countdown" data-deadline="{{.Match.AcceptDeadline.Format "2006-01-02T15:04:05Z"}}"></div>
 
                                 <div id="accept-status" class="accept-status">
                                     <p>{{len .Match.AcceptedPlayers}}/10 players accepted</p>
@@ -38,6 +38,7 @@
                     {{else if eq .Match.State 2}}
                         <div class="match-status">
                             <h3>Waiting for Dota 2 lobby...</h3>
+                            <div class="countdown" data-deadline="{{.Match.LobbyDeadline.Format "2006-01-02T15:04:05Z"}}"></div>
                             <div class="spinner"></div>
                             <p>The bot is creating your Dota 2 lobby. You will receive an invite shortly.</p>
                         </div>
@@ -95,6 +96,7 @@
 {{define "draft-page"}}
 <div id="draft" class="draft-panel">
     <h3>Player Draft</h3>
+    <div class="countdown" data-deadline="{{.Match.PickDeadline.Format "2006-01-02T15:04:05Z"}}"></div>
 
     <div class="draft-layout">
         <div class="team radiant">

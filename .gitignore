@@ -7,10 +7,6 @@ restart.sh
 *.so
 *.dylib
 
-data/inhouse.log
-data/inhouse.db
-data/vapid_keys.env
-
+data
 bin
-
 dota-inhouse.service

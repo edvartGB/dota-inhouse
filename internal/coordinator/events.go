@@ -33,6 +33,7 @@ type DraftStarted struct {
 	Radiant   []Player
 	Dire      []Player
 	Available []Player
+	Deadline  time.Time
 }
 
 func (DraftStarted) event() {}
@@ -44,6 +45,7 @@ type DraftUpdated struct {
 	Radiant          []Player
 	Dire             []Player
 	CurrentPicker    int
+	Deadline         time.Time
 }
 
 func (DraftUpdated) event() {}
@@ -67,6 +69,7 @@ type RequestBotLobby struct {
 	Radiant  []Player
 	Dire     []Player
 	GameMode string // "cm", "ap", "cd", "rd", "ar"
+	Deadline time.Time
 }
 
 func (RequestBotLobby) event() {}

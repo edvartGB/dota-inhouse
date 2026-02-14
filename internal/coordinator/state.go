@@ -39,6 +39,8 @@ type Match struct {
 	Players          []Player        // All 10 players in this match
 	AcceptedPlayers  map[string]bool // SteamID -> accepted
 	AcceptDeadline   time.Time
+	PickDeadline     time.Time
+	LobbyDeadline    time.Time
 	Captains         [2]Player
 	Radiant          []Player
 	Dire             []Player

@@ -17,6 +17,7 @@ var MaxPlayers = 10
 const (
 	MatchAcceptTimeoutDur = 30 * time.Second
 	DraftPickTimeoutDur   = 60 * time.Second
+	LobbyJoinTimeoutDur   = 5 * time.Minute
 )
 
 // Coordinator owns all mutable state and processes commands sequentially.
@@ -331,6 +332,7 @@ func (c *Coordinator) startDraft(match *Match) {
 	match.AvailablePlayers = available
 	match.CurrentPicker = 0 // Radiant picks first
 	match.PickCount = 0
+	match.PickDeadline = time.Now().Add(DraftPickTimeoutDur)
 
 	log.Printf("Match %s started draft phase. Captains: %s (priority %d, Radiant), %s (priority %d, Dire)",
 		match.ID, captains[0].Name, captains[0].CaptainPriority, captains[1].Name, captains[1].CaptainPriority)
@@ -341,6 +343,7 @@ func (c *Coordinator) startDraft(match *Match) {
 		Radiant:   match.Radiant,
 		Dire:      match.Dire,
 		Available: available,
+		Deadline:  match.PickDeadline,
 	})
 
 	// If no players to pick (e.g. 2-player match), complete draft immediately
@@ -395,6 +398,7 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 
 	match.PickCount++
 	match.CurrentPicker = getPickerForPickCount(match.PickCount)
+	match.PickDeadline = time.Now().Add(DraftPickTimeoutDur)
 
 	c.emit(DraftUpdated{
 		MatchID:          match.ID,
@@ -403,6 +407,7 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 		Radiant:          match.Radiant,
 		Dire:             match.Dire,
 		CurrentPicker:    match.CurrentPicker,
+		Deadline:         match.PickDeadline,
 	})
 
 	// Auto-assign last remaining player
@@ -426,6 +431,7 @@ func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
 			Radiant:          match.Radiant,
 			Dire:             match.Dire,
 			CurrentPicker:    match.CurrentPicker,
+			Deadline:         match.PickDeadline,
 		})
 	}
 
@@ -444,6 +450,7 @@ func (c *Coordinator) completeDraft(match *Match) {
 	}
 
 	match.State = MatchStateWaitingForBot
+	match.LobbyDeadline = time.Now().Add(LobbyJoinTimeoutDur)
 
 	log.Printf("Match %s draft complete, requesting bot lobby", match.ID)
 
@@ -453,6 +460,7 @@ func (c *Coordinator) completeDraft(match *Match) {
 		Radiant:  match.Radiant,
 		Dire:     match.Dire,
 		GameMode: c.state.LobbySettings.GameMode,
+		Deadline: match.LobbyDeadline,
 	})
 }
 

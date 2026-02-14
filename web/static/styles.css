@@ -406,6 +406,26 @@ main {
     to { transform: rotate(360deg); }
 }
 
+/* Countdown Timer */
+.countdown {
+    font-size: 2rem;
+    font-weight: bold;
+    text-align: center;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    margin: 0.5rem 0;
+}
+
+.countdown-urgent {
+    color: #e74c3c;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 /* Notifications */
 .notification {
     padding: 1rem;

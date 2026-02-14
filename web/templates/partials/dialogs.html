@@ -3,6 +3,7 @@
     <div id="accept-dialog" class="dialog-overlay">
         <div class="dialog">
             <h3>Match Found!</h3>
+            <div class="countdown" data-deadline="{{.Deadline}}"></div>
             <p>A match has been found. Accept to join the draft.</p>
 
             <div id="accept-status">
@@ -71,6 +72,7 @@
 <div id="match-area" hx-swap-oob="true">
     <div class="match-status">
         <h3>{{.Message}}</h3>
+        <div class="countdown" data-deadline="{{.Deadline}}"></div>
         <div class="spinner"></div>
         <p>The bot is creating your Dota 2 lobby. You will receive an invite shortly.</p>
     </div>
