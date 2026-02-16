@@ -16,7 +16,7 @@ import (
 // handleAdminPage renders the admin dashboard.
 func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
-	queue, matches, lobbySettings, queueOpen := s.coordinator.GetState()
+	queue, matches, lobbySettings := s.coordinator.GetState()
 
 	users, err := s.store.ListUsers(r.Context())
 	if err != nil {
@@ -29,7 +29,6 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 		"Matches":        matches,
 		"Users":          users,
 		"LobbySettings":  lobbySettings,
-		"QueueOpen":      queueOpen,
 		"ValidGameModes": coordinator.ValidGameModes,
 		"IsAdmin":        true,
 		"LogLines":       s.readLogTail(50),
@@ -138,6 +137,7 @@ func (s *Server) handleAdminKickPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Admin kicked player %s from queue", playerID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -182,29 +182,6 @@ func (s *Server) handleAdminSetLobbySettings(w http.ResponseWriter, r *http.Requ
 		Settings: coordinator.LobbySettings{
 			GameMode: gameMode,
 		},
-		Response: resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
-}
-
-func (s *Server) handleAdminOpenQueue(w http.ResponseWriter, r *http.Request) {
-	s.handleAdminSetQueueOpen(w, r, true)
-}
-
-func (s *Server) handleAdminCloseQueue(w http.ResponseWriter, r *http.Request) {
-	s.handleAdminSetQueueOpen(w, r, false)
-}
-
-func (s *Server) handleAdminSetQueueOpen(w http.ResponseWriter, r *http.Request, open bool) {
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminSetQueueOpen{
-		Open:     open,
 		Response: resp,
 	})
 
@@ -263,7 +240,7 @@ func (s *Server) readLogTail(n int) []string {
 
 // handleAdminState returns the current state as JSON.
 func (s *Server) handleAdminState(w http.ResponseWriter, r *http.Request) {
-	queue, matches, lobbySettings, queueOpen := s.coordinator.GetState()
+	queue, matches, lobbySettings := s.coordinator.GetState()
 
 	matchList := make([]map[string]interface{}, 0)
 	for id, m := range matches {
@@ -283,7 +260,6 @@ func (s *Server) handleAdminState(w http.ResponseWriter, r *http.Request) {
 		"queue":         queue,
 		"matches":       matchList,
 		"lobbySettings": lobbySettings,
-		"queueOpen":     queueOpen,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

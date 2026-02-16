@@ -39,9 +39,9 @@
 {{define "accept-status"}}
 <div id="accept-status" class="accept-status" hx-swap-oob="true">
     <p>{{.Count}}/{{.Total}} players accepted</p>
-    <!-- <div class="progress-bar">
+    <div class="progress-bar">
         <div class="progress" style="width: {{percent .Count .Total}}%"></div>
-    </div> -->
+    </div>
     {{if .Players}}
     <ul class="accept-player-list">
         {{range .Players}}
@@ -72,6 +72,7 @@
 <div id="match-area" hx-swap-oob="true">
     <div class="match-status">
         <h3>{{.Message}}</h3>
+        <div class="countdown" data-deadline="{{.Deadline}}"></div>
         <div class="spinner"></div>
         <p>The bot is creating your Dota 2 lobby. You will receive an invite shortly.</p>
     </div>

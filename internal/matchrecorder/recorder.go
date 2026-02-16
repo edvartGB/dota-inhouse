@@ -67,7 +67,7 @@ func (r *Recorder) recordMatchStarted(ctx context.Context, e coordinator.MatchSt
 			Accepted:   true,
 		}
 		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
-			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.Name, e.MatchID[:8], err)
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, e.MatchID[:8], err)
 		}
 	}
 
@@ -81,7 +81,7 @@ func (r *Recorder) recordMatchStarted(ctx context.Context, e coordinator.MatchSt
 			Accepted:   true,
 		}
 		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
-			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.Name, e.MatchID[:8], err)
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, e.MatchID[:8], err)
 		}
 	}
 
@@ -155,7 +155,7 @@ func (r *Recorder) addMatchPlayers(ctx context.Context, matchID string, radiant,
 			Accepted: true,
 		}
 		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
-			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.Name, matchID[:8], err)
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, matchID[:8], err)
 		}
 	}
 	for _, p := range dire {
@@ -166,7 +166,7 @@ func (r *Recorder) addMatchPlayers(ctx context.Context, matchID string, radiant,
 			Accepted: true,
 		}
 		if err := r.store.AddMatchPlayer(ctx, mp); err != nil {
-			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.Name, matchID[:8], err)
+			log.Printf("Match recorder: failed to add player %s to match %s: %v", p.SteamID, matchID[:8], err)
 		}
 	}
 }

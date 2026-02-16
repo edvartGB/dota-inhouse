@@ -72,7 +72,6 @@ type State struct {
 	Queue         []Player          // Players waiting for a match
 	Matches       map[string]*Match // Active matches keyed by match ID
 	LobbySettings LobbySettings     // Configurable lobby settings
-	QueueOpen     bool              // Whether players are allowed to join queue
 }
 
 func NewState() *State {
@@ -80,7 +79,6 @@ func NewState() *State {
 		Queue:         []Player{},
 		Matches:       make(map[string]*Match),
 		LobbySettings: DefaultLobbySettings(),
-		QueueOpen:     false, // Queue is closed by default on startup.
 	}
 }
 
@@ -112,12 +110,12 @@ func (s *State) GetMatch(matchID string) *Match {
 	return s.Matches[matchID]
 }
 
-func (s *State) RemoveFromQueue(steamID string) (Player, bool) {
+func (s *State) RemoveFromQueue(steamID string) bool {
 	for i, p := range s.Queue {
 		if p.SteamID == steamID {
 			s.Queue = append(s.Queue[:i], s.Queue[i+1:]...)
-			return p, true
+			return true
 		}
 	}
-	return Player{}, false
+	return false
 }

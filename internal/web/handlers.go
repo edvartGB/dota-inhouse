@@ -47,7 +47,7 @@ func (s *Server) handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Player %s joined queue", user.Name)
+	log.Printf("Player %s (%s) joined queue", user.Name, user.SteamID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -69,7 +69,7 @@ func (s *Server) handleLeaveQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Player %s left queue", user.Name)
+	log.Printf("Player %s (%s) left queue", user.Name, user.SteamID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -98,7 +98,7 @@ func (s *Server) handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Player %s accepted match %s", user.Name, matchID[:8])
+	log.Printf("Player %s (%s) accepted match %s", user.Name, user.SteamID, matchID[:8])
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -204,7 +204,7 @@ func (s *Server) handleDevPick(w http.ResponseWriter, r *http.Request) {
 	playerID := chi.URLParam(r, "playerID")
 
 	// Get the specific match to find the current captain
-	_, matches, _, _ := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)
@@ -239,7 +239,7 @@ func (s *Server) handleDevBotGameStarted(w http.ResponseWriter, r *http.Request)
 	matchID := chi.URLParam(r, "matchID")
 
 	// Verify match exists and is in correct state
-	_, matches, _, _ := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)
@@ -264,7 +264,7 @@ func (s *Server) handleDevBotGameEnded(w http.ResponseWriter, r *http.Request) {
 	matchID := chi.URLParam(r, "matchID")
 
 	// Verify match exists
-	_, matches, _, _ := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)
@@ -291,7 +291,7 @@ func (s *Server) handleDevBotLobbyTimeout(w http.ResponseWriter, r *http.Request
 	matchID := chi.URLParam(r, "matchID")
 
 	// Verify match exists and is in waiting for bot state
-	_, matches, _, _ := s.coordinator.GetState()
+	_, matches, _ := s.coordinator.GetState()
 	match, ok := matches[matchID]
 	if !ok || match == nil {
 		http.Error(w, "match not found", http.StatusBadRequest)
