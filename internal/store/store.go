@@ -95,6 +95,7 @@ type LeaderboardEntry struct {
 	AvatarURL string
 	Wins      int
 	Losses    int
+	Delta     int // Wins - losses
 	Total     int
 	WinRate   float64
 	Streak    int // Positive = win streak, negative = loss streak

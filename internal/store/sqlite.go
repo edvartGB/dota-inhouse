@@ -377,6 +377,7 @@ func (s *SQLiteStore) GetLeaderboard(ctx context.Context, startDate, endDate *ti
 			e.Name = e.SteamID
 		}
 		e.AvatarURL = avatar.String
+		e.Delta = e.Wins - e.Losses
 		if e.Total > 0 {
 			e.WinRate = float64(e.Wins) / float64(e.Total) * 100
 		}

@@ -54,7 +54,7 @@
                             <th class="player">Player</th>
                             <th class="stat">W</th>
                             <th class="stat">L</th>
-                            <th class="stat">Total</th>
+                            <th class="stat">Delta</th>
                             <th class="stat">Win %</th>
                             <th class="stat">Streak</th>
                         </tr>
@@ -69,7 +69,9 @@
                             </td>
                             <td class="stat wins">{{$e.Wins}}</td>
                             <td class="stat losses">{{$e.Losses}}</td>
-                            <td class="stat">{{$e.Total}}</td>
+                            <td class="stat delta {{if gt $e.Delta 0}}positive{{else if lt $e.Delta 0}}negative{{end}}">
+                                {{if gt $e.Delta 0}}+{{$e.Delta}}{{else}}{{$e.Delta}}{{end}}
+                            </td>
                             <td class="stat">{{printf "%.1f" $e.WinRate}}%</td>
                             <td class="stat streak {{if gt $e.Streak 0}}win-streak{{else if lt $e.Streak 0}}loss-streak{{end}}">
                                 {{if gt $e.Streak 0}}W{{$e.Streak}}{{else if lt $e.Streak 0}}L{{abs $e.Streak}}{{else}}-{{end}}

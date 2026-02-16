@@ -817,6 +817,16 @@ main {
     color: var(--accent-dire);
 }
 
+.leaderboard-table .delta.positive {
+    color: var(--accent-radiant);
+    font-weight: bold;
+}
+
+.leaderboard-table .delta.negative {
+    color: var(--accent-dire);
+    font-weight: bold;
+}
+
 .leaderboard-table .streak.win-streak {
     color: var(--accent-radiant);
     font-weight: bold;
