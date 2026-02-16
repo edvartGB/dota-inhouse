@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 )
@@ -131,7 +132,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			MatchID:      e.MatchID,
 			Players:      e.Players,
 			Accepted:     make(map[string]bool),
-			Deadline:     e.Deadline.Format("2006-01-02T15:04:05Z"),
+			Deadline:     e.Deadline.Format(time.RFC3339),
 			Count:        0,
 			Total:        coordinator.MaxPlayers,
 			UserID:       userID,
@@ -189,7 +190,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			AvailablePlayers: e.Available,
 			CurrentPicker:    0,
 			DevMode:          h.devMode,
-			Deadline:         e.Deadline.Format("2006-01-02T15:04:05Z"),
+			Deadline:         e.Deadline.Format(time.RFC3339),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
 			log.Printf("Failed to render draft: %v", err)
@@ -209,7 +210,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			Dire:             e.Dire,
 			CurrentPicker:    e.CurrentPicker,
 			DevMode:          h.devMode,
-			Deadline:         e.Deadline.Format("2006-01-02T15:04:05Z"),
+			Deadline:         e.Deadline.Format(time.RFC3339),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
 			log.Printf("Failed to render draft: %v", err)
@@ -296,7 +297,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}{
 			MatchID:  e.MatchID,
 			Message:  "Waiting for Dota 2 lobby...",
-			Deadline: e.Deadline.Format("2006-01-02T15:04:05Z"),
+			Deadline: e.Deadline.Format(time.RFC3339),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
 			log.Printf("Failed to render waiting: %v", err)
