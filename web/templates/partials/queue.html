@@ -4,13 +4,20 @@
     <ul class="player-list">
         {{range .Queue}}
             <li class="player">
-                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                {{if .AvatarURL}}
+                    <img src="{{.AvatarURL}}" alt="" class="avatar">
+                {{else}}
+                    <span class="avatar avatar-slot" aria-hidden="true"></span>
+                {{end}}
                 <span>{{.Name}}</span>
             </li>
         {{end}}
         {{$remaining := sub 10 (len .Queue)}}
         {{range iterate $remaining}}
-            <li class="player empty">Empty slot</li>
+            <li class="player empty">
+                <span class="avatar avatar-slot" aria-hidden="true"></span>
+                <span>Empty slot</span>
+            </li>
         {{end}}
     </ul>
 
@@ -83,13 +90,20 @@
     <ul class="player-list">
         {{range .Queue}}
             <li class="player">
-                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                {{if .AvatarURL}}
+                    <img src="{{.AvatarURL}}" alt="" class="avatar">
+                {{else}}
+                    <span class="avatar avatar-slot" aria-hidden="true"></span>
+                {{end}}
                 <span>{{.Name}}</span>
             </li>
         {{end}}
         {{$remaining := sub 10 (len .Queue)}}
         {{range iterate $remaining}}
-            <li class="player empty">Empty slot</li>
+            <li class="player empty">
+                <span class="avatar avatar-slot" aria-hidden="true"></span>
+                <span>Empty slot</span>
+            </li>
         {{end}}
     </ul>
 
