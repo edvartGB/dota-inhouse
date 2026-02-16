@@ -416,6 +416,8 @@ main {
 /* Countdown Timer */
 .countdown {
     font-size: 2rem;
+    line-height: 1.2;
+    min-height: 1.2em;
     font-weight: bold;
     text-align: center;
     color: var(--text-primary);
