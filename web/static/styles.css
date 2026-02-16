@@ -235,6 +235,51 @@ main {
     padding: 1.5rem;
 }
 
+.draft-header {
+    margin-bottom: 0.75rem;
+}
+
+.draft-status-row {
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.turn-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.turn-indicator.radiant {
+    border-color: var(--accent-radiant);
+    color: #d6e58a;
+}
+
+.turn-indicator.dire {
+    border-color: var(--accent-dire);
+    color: #ef9f94;
+}
+
+.turn-indicator.complete {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.countdown-frame {
+    min-width: 96px;
+    text-align: right;
+}
+
 .draft-layout {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -261,9 +306,28 @@ main {
 }
 
 .team .captain {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     font-size: 0.85rem;
     color: var(--text-secondary);
     margin-bottom: 0.5rem;
+}
+
+.team-turn {
+    display: inline-block;
+    margin-bottom: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.team-turn.active {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background: rgba(74, 158, 255, 0.12);
 }
 
 .available {
@@ -278,21 +342,20 @@ main {
 
 .player.pickable {
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, transform 0.2s;
+    border: 1px solid transparent;
 }
 
 .player.pickable:hover {
-    background: var(--accent-primary);
+    background: rgba(74, 158, 255, 0.2);
+    border-color: rgba(74, 158, 255, 0.5);
+    transform: translateY(-1px);
 }
 
-.picking-indicator {
-    display: block;
-    margin-top: 0.5rem;
-    padding: 0.25rem 0.5rem;
-    background: var(--accent-primary);
-    border-radius: 4px;
-    font-size: 0.85rem;
-    text-align: center;
+.draft-player {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 /* Dialog */
@@ -411,6 +474,11 @@ main {
     font-size: 2rem;
     font-weight: bold;
     text-align: center;
+    min-height: 2.2rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
     margin: 0.5rem 0;
@@ -905,6 +973,16 @@ main {
 
     .draft-panel {
         padding: 1rem;
+    }
+
+    .draft-status-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .countdown-frame {
+        text-align: left;
+        min-width: 0;
     }
 
     .history-match .match-teams {

@@ -1,35 +1,56 @@
 {{define "draft"}}
 <div id="match-area" hx-swap-oob="true">
 <div id="draft" class="draft-panel">
-    <h3>Player Draft</h3>
-    <div class="countdown" data-deadline="{{.Deadline}}"></div>
+    <div class="draft-header">
+        <h3>Player Draft</h3>
+        <div class="draft-status-row">
+            {{if gt (len .AvailablePlayers) 0}}
+                <div class="turn-indicator {{if eq .CurrentPicker 0}}radiant{{else}}dire{{end}}">
+                    {{if eq .CurrentPicker 0}}Radiant{{else}}Dire{{end}} captain on the clock:
+                    <strong>{{index .Captains .CurrentPicker | getPlayerName}}</strong>
+                </div>
+            {{else}}
+                <div class="turn-indicator complete">Draft complete</div>
+            {{end}}
+            <div class="countdown-frame">
+                <div class="countdown" data-deadline="{{.Deadline}}"></div>
+            </div>
+        </div>
+    </div>
 
     <div class="draft-layout">
         <div class="team radiant">
             <h4>Radiant</h4>
-            <p class="captain">Captain: {{index .Captains 0 | getPlayerName}}</p>
+            <p class="captain">
+                {{if (index .Captains 0).AvatarURL}}<img src="{{(index .Captains 0).AvatarURL}}" alt="" class="avatar">{{end}}
+                <span>Captain:</span> {{index .Captains 0 | getPlayerName}}
+            </p>
+            <p class="team-turn {{if and (eq .CurrentPicker 0) (gt (len .AvailablePlayers) 0)}}active{{end}}">
+                {{if and (eq .CurrentPicker 0) (gt (len .AvailablePlayers) 0)}}On the clock{{else}}Waiting{{end}}
+            </p>
             <ul class="player-list">
                 {{range .Radiant}}
-                    <li class="player">{{.Name}}</li>
+                    <li class="player draft-player">
+                        {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                        <span>{{.Name}}</span>
+                    </li>
                 {{end}}
             </ul>
-            {{if and (eq .CurrentPicker 0) (gt (len .AvailablePlayers) 0)}}
-                <span class="picking-indicator">Picking...</span>
-            {{end}}
         </div>
 
         <div class="available">
             <h4>Available Players</h4>
             <ul class="player-list">
                 {{range .AvailablePlayers}}
-                    <li class="player pickable"
+                    <li class="player draft-player pickable"
                         {{if $.DevMode}}
                         hx-post="/dev/pick/{{$.MatchID}}/{{.SteamID}}"
                         {{else}}
                         hx-post="/match/{{$.MatchID}}/pick/{{.SteamID}}"
                         {{end}}
                         hx-swap="none">
-                        {{.Name}}
+                        {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                        <span>{{.Name}}</span>
                     </li>
                 {{end}}
                 {{if eq (len .AvailablePlayers) 0}}
@@ -40,15 +61,21 @@
 
         <div class="team dire">
             <h4>Dire</h4>
-            <p class="captain">Captain: {{index .Captains 1 | getPlayerName}}</p>
+            <p class="captain">
+                {{if (index .Captains 1).AvatarURL}}<img src="{{(index .Captains 1).AvatarURL}}" alt="" class="avatar">{{end}}
+                <span>Captain:</span> {{index .Captains 1 | getPlayerName}}
+            </p>
+            <p class="team-turn {{if and (eq .CurrentPicker 1) (gt (len .AvailablePlayers) 0)}}active{{end}}">
+                {{if and (eq .CurrentPicker 1) (gt (len .AvailablePlayers) 0)}}On the clock{{else}}Waiting{{end}}
+            </p>
             <ul class="player-list">
                 {{range .Dire}}
-                    <li class="player">{{.Name}}</li>
+                    <li class="player draft-player">
+                        {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                        <span>{{.Name}}</span>
+                    </li>
                 {{end}}
             </ul>
-            {{if and (eq .CurrentPicker 1) (gt (len .AvailablePlayers) 0)}}
-                <span class="picking-indicator">Picking...</span>
-            {{end}}
         </div>
     </div>
 </div>

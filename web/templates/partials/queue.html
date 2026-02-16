@@ -17,17 +17,23 @@
     <div class="queue-actions">
         {{if .InMatch}}
             <button class="btn btn-secondary" disabled>In Match</button>
-        {{else}}
-            <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
-                hx-indicator="#join-btn" hx-disabled-elt="this"
-                {{if .InQueue}}style="display:none;"{{end}}>
-                Join Queue
-            </button>
+        {{else if .InQueue}}
             <button hx-post="/queue/leave" hx-swap="none" class="btn btn-danger" id="leave-btn"
-                hx-indicator="#leave-btn" hx-disabled-elt="this"
-                {{if not .InQueue}}style="display:none;"{{end}}>
+                hx-indicator="#leave-btn" hx-disabled-elt="this">
                 Leave Queue
             </button>
+            {{if not .QueueOpen}}
+                <p class="no-matches">Queue is currently closed</p>
+            {{end}}
+        {{else}}
+            {{if .QueueOpen}}
+                <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
+                    hx-indicator="#join-btn" hx-disabled-elt="this">
+                    Join Queue
+                </button>
+            {{else}}
+                <button class="btn btn-secondary" disabled>Queue Closed</button>
+            {{end}}
         {{end}}
     </div>
 </div>
@@ -96,17 +102,23 @@
     <div class="queue-actions">
         {{if .InMatch}}
             <button class="btn btn-secondary" disabled>In Match</button>
-        {{else}}
-            <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
-                hx-indicator="#join-btn" hx-disabled-elt="this"
-                {{if .InQueue}}style="display:none;"{{end}}>
-                Join Queue
-            </button>
+        {{else if .InQueue}}
             <button hx-post="/queue/leave" hx-swap="none" class="btn btn-danger" id="leave-btn"
-                hx-indicator="#leave-btn" hx-disabled-elt="this"
-                {{if not .InQueue}}style="display:none;"{{end}}>
+                hx-indicator="#leave-btn" hx-disabled-elt="this">
                 Leave Queue
             </button>
+            {{if not .QueueOpen}}
+                <p class="no-matches">Queue is currently closed</p>
+            {{end}}
+        {{else}}
+            {{if .QueueOpen}}
+                <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
+                    hx-indicator="#join-btn" hx-disabled-elt="this">
+                    Join Queue
+                </button>
+            {{else}}
+                <button class="btn btn-secondary" disabled>Queue Closed</button>
+            {{end}}
         {{end}}
     </div>
 </div>

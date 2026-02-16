@@ -17,7 +17,7 @@
                         <div id="accept-dialog" class="dialog-overlay">
                             <div class="dialog">
                                 <h3>Match Found!</h3>
-                                <div class="countdown" data-deadline="{{.Match.AcceptDeadline.Format "2006-01-02T15:04:05Z"}}"></div>
+                                <div class="countdown" data-deadline="{{.Match.AcceptDeadline.UTC.Format "2006-01-02T15:04:05Z"}}"></div>
 
                                 <div id="accept-status" class="accept-status">
                                     <p>{{len .Match.AcceptedPlayers}}/10 players accepted</p>
@@ -38,7 +38,7 @@
                     {{else if eq .Match.State 2}}
                         <div class="match-status">
                             <h3>Waiting for Dota 2 lobby...</h3>
-                            <div class="countdown" data-deadline="{{.Match.LobbyDeadline.Format "2006-01-02T15:04:05Z"}}"></div>
+                            <div class="countdown" data-deadline="{{.Match.LobbyDeadline.UTC.Format "2006-01-02T15:04:05Z"}}"></div>
                             <div class="spinner"></div>
                             <p>The bot is creating your Dota 2 lobby. You will receive an invite shortly.</p>
                         </div>
@@ -95,35 +95,56 @@
 
 {{define "draft-page"}}
 <div id="draft" class="draft-panel">
-    <h3>Player Draft</h3>
-    <div class="countdown" data-deadline="{{.Match.PickDeadline.Format "2006-01-02T15:04:05Z"}}"></div>
+    <div class="draft-header">
+        <h3>Player Draft</h3>
+        <div class="draft-status-row">
+            {{if gt (len .Match.AvailablePlayers) 0}}
+                <div class="turn-indicator {{if eq .Match.CurrentPicker 0}}radiant{{else}}dire{{end}}">
+                    {{if eq .Match.CurrentPicker 0}}Radiant{{else}}Dire{{end}} captain on the clock:
+                    <strong>{{(index .Match.Captains .Match.CurrentPicker).Name}}</strong>
+                </div>
+            {{else}}
+                <div class="turn-indicator complete">Draft complete</div>
+            {{end}}
+            <div class="countdown-frame">
+                <div class="countdown" data-deadline="{{.Match.PickDeadline.UTC.Format "2006-01-02T15:04:05Z"}}"></div>
+            </div>
+        </div>
+    </div>
 
     <div class="draft-layout">
         <div class="team radiant">
             <h4>Radiant</h4>
-            <p class="captain">Captain: {{(index .Match.Captains 0).Name}}</p>
+            <p class="captain">
+                {{if (index .Match.Captains 0).AvatarURL}}<img src="{{(index .Match.Captains 0).AvatarURL}}" alt="" class="avatar">{{end}}
+                <span>Captain:</span> {{(index .Match.Captains 0).Name}}
+            </p>
+            <p class="team-turn {{if and (eq .Match.CurrentPicker 0) (gt (len .Match.AvailablePlayers) 0)}}active{{end}}">
+                {{if and (eq .Match.CurrentPicker 0) (gt (len .Match.AvailablePlayers) 0)}}On the clock{{else}}Waiting{{end}}
+            </p>
             <ul class="player-list">
                 {{range .Match.Radiant}}
-                    <li class="player">{{.Name}}</li>
+                    <li class="player draft-player">
+                        {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                        <span>{{.Name}}</span>
+                    </li>
                 {{end}}
             </ul>
-            {{if and (eq .Match.CurrentPicker 0) (gt (len .Match.AvailablePlayers) 0)}}
-                <span class="picking-indicator">Picking...</span>
-            {{end}}
         </div>
 
         <div class="available">
             <h4>Available Players</h4>
             <ul class="player-list">
                 {{range .Match.AvailablePlayers}}
-                    <li class="player pickable"
+                    <li class="player draft-player pickable"
                         {{if $.DevMode}}
                         hx-post="/dev/pick/{{$.Match.ID}}/{{.SteamID}}"
                         {{else}}
                         hx-post="/match/{{$.Match.ID}}/pick/{{.SteamID}}"
                         {{end}}
                         hx-swap="none">
-                        {{.Name}}
+                        {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                        <span>{{.Name}}</span>
                     </li>
                 {{end}}
                 {{if eq (len .Match.AvailablePlayers) 0}}
@@ -134,15 +155,21 @@
 
         <div class="team dire">
             <h4>Dire</h4>
-            <p class="captain">Captain: {{(index .Match.Captains 1).Name}}</p>
+            <p class="captain">
+                {{if (index .Match.Captains 1).AvatarURL}}<img src="{{(index .Match.Captains 1).AvatarURL}}" alt="" class="avatar">{{end}}
+                <span>Captain:</span> {{(index .Match.Captains 1).Name}}
+            </p>
+            <p class="team-turn {{if and (eq .Match.CurrentPicker 1) (gt (len .Match.AvailablePlayers) 0)}}active{{end}}">
+                {{if and (eq .Match.CurrentPicker 1) (gt (len .Match.AvailablePlayers) 0)}}On the clock{{else}}Waiting{{end}}
+            </p>
             <ul class="player-list">
                 {{range .Match.Dire}}
-                    <li class="player">{{.Name}}</li>
+                    <li class="player draft-player">
+                        {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar">{{end}}
+                        <span>{{.Name}}</span>
+                    </li>
                 {{end}}
             </ul>
-            {{if and (eq .Match.CurrentPicker 1) (gt (len .Match.AvailablePlayers) 0)}}
-                <span class="picking-indicator">Picking...</span>
-            {{end}}
         </div>
     </div>
 </div>

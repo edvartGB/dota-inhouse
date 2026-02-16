@@ -137,6 +137,8 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 
 		r.Get("/admin", s.handleAdminPage)
 		r.Get("/admin/state", s.handleAdminState)
+		r.Post("/admin/queue/open", s.handleAdminOpenQueue)
+		r.Post("/admin/queue/close", s.handleAdminCloseQueue)
 		r.Post("/admin/match/{matchID}/cancel", s.handleAdminCancelMatch)
 		r.Post("/admin/match/{matchID}/result/{winner}", s.handleAdminSetResult)
 		r.Post("/admin/queue/kick/{playerID}", s.handleAdminKickPlayer)
@@ -158,7 +160,7 @@ func (s *Server) StartSSE(events <-chan coordinator.Event) {
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	user, _ := s.sessions.GetUser(r.Context(), r)
 
-	queue, matches, _ := s.coordinator.GetState()
+	queue, matches, _, queueOpen := s.coordinator.GetState()
 
 	matchList := make([]*coordinator.Match, 0, len(matches))
 	for _, m := range matches {
@@ -166,10 +168,11 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := PageData{
-		User:    user,
-		Queue:   queue,
-		Matches: matchList,
-		DevMode: s.devMode,
+		User:      user,
+		Queue:     queue,
+		Matches:   matchList,
+		QueueOpen: queueOpen,
+		DevMode:   s.devMode,
 	}
 
 	if user != nil {
@@ -190,13 +193,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 type PageData struct {
-	User    interface{}
-	Queue   []coordinator.Player
-	Match   *coordinator.Match
-	Matches []*coordinator.Match
-	InQueue bool
-	InMatch bool
-	DevMode bool
+	User      interface{}
+	Queue     []coordinator.Player
+	Match     *coordinator.Match
+	Matches   []*coordinator.Match
+	QueueOpen bool
+	InQueue   bool
+	InMatch   bool
+	DevMode   bool
 }
 
 type HistoryPageData struct {

@@ -43,13 +43,15 @@ type NotificationPayload struct {
 
 // SendToUser sends a push notification to all subscriptions for a specific user
 func (s *Service) SendToUser(ctx context.Context, steamID string, payload NotificationPayload) error {
+	userLogName := s.userLogName(ctx, steamID)
+
 	subs, err := s.store.GetPushSubscriptions(ctx, steamID)
 	if err != nil {
 		return fmt.Errorf("failed to get subscriptions: %w", err)
 	}
 
 	if len(subs) == 0 {
-		log.Printf("No push subscriptions found for user %s", steamID)
+		log.Printf("No push subscriptions found for user %s", userLogName)
 		return nil
 	}
 
@@ -95,7 +97,7 @@ func (s *Service) SendToUser(ctx context.Context, steamID string, payload Notifi
 			lastErr = fmt.Errorf("push failed with status %d", resp.StatusCode)
 		} else {
 			successCount++
-			log.Printf("Push notification sent successfully to %s", steamID)
+			log.Printf("Push notification sent successfully to %s", userLogName)
 		}
 	}
 
@@ -116,10 +118,18 @@ func (s *Service) SendToMultipleUsers(ctx context.Context, steamIDs []string, pa
 		// Send in background, don't block
 		go func(id string) {
 			if err := s.SendToUser(ctx, id, payload); err != nil {
-				log.Printf("Failed to send push to user %s: %v", id, err)
+				log.Printf("Failed to send push to user %s: %v", s.userLogName(ctx, id), err)
 			}
 		}(steamID)
 	}
+}
+
+func (s *Service) userLogName(ctx context.Context, steamID string) string {
+	user, err := s.store.GetUser(ctx, steamID)
+	if err != nil || user == nil || user.Name == "" {
+		return steamID
+	}
+	return user.Name
 }
 
 // GetPublicKey returns the VAPID public key for frontend use

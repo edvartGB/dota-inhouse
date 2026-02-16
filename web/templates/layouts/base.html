@@ -51,7 +51,7 @@
 
     <script src="/static/app.js"></script>
     <script>
-    setInterval(function() {
+    function updateCountdowns() {
         document.querySelectorAll('.countdown[data-deadline]').forEach(function(el) {
             var remaining = Math.max(0, Math.floor((new Date(el.dataset.deadline) - Date.now()) / 1000));
             var m = Math.floor(remaining / 60);
@@ -59,7 +59,12 @@
             el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
             el.classList.toggle('countdown-urgent', remaining <= 10);
         });
-    }, 1000);
+    }
+
+    updateCountdowns();
+    setInterval(updateCountdowns, 1000);
+    document.body.addEventListener('htmx:afterSwap', updateCountdowns);
+    document.body.addEventListener('htmx:oobAfterSwap', updateCountdowns);
     </script>
 </body>
 </html>

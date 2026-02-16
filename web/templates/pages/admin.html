@@ -146,6 +146,29 @@
             </div>
 
             <div class="admin-section">
+                <h3>Queue Controls</h3>
+                <p>
+                    Status:
+                    {{if .QueueOpen}}
+                        <span class="state-badge state-ingame">Open</span>
+                    {{else}}
+                        <span class="state-badge state-waiting">Closed</span>
+                    {{end}}
+                </p>
+                <div class="admin-actions" style="margin-top: 0.75rem;">
+                    {{if .QueueOpen}}
+                        <form action="/admin/queue/close" method="POST">
+                            <button type="submit" class="btn btn-danger btn-small">Close Queue</button>
+                        </form>
+                    {{else}}
+                        <form action="/admin/queue/open" method="POST">
+                            <button type="submit" class="btn btn-primary btn-small">Open Queue</button>
+                        </form>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="admin-section">
                 <h3>Recent Logs</h3>
                 {{if .LogLines}}
                 <div class="log-output" id="log-output">{{range .LogLines}}{{.}}
@@ -171,7 +194,7 @@
             </div>
 
             <div class="admin-section">
-                <h3>Queue ({{len .Queue}} players)</h3>
+                <h3>Queue ({{len .Queue}} players){{if not .QueueOpen}} - Closed{{end}}</h3>
                 {{if .Queue}}
                 <table class="admin-table">
                     <thead>
