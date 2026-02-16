@@ -113,6 +113,12 @@ func templateFuncs() template.FuncMap {
 			}
 			return *s
 		},
+		"derefInt": func(v *int) int {
+			if v == nil {
+				return 0
+			}
+			return *v
+		},
 		"formatDuration": func(seconds *int) string {
 			if seconds == nil {
 				return ""

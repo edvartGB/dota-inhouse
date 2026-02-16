@@ -306,6 +306,29 @@ func (s *SQLiteStore) ListMatches(ctx context.Context, limit int) ([]Match, erro
 	return matches, rows.Err()
 }
 
+func (s *SQLiteStore) ListIncompleteMatches(ctx context.Context, limit int) ([]Match, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, dota_match_id, state, started_at, ended_at, winner, duration
+		 FROM matches
+		 WHERE state != 'completed'
+		 ORDER BY started_at DESC
+		 LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var matches []Match
+	for rows.Next() {
+		var m Match
+		if err := rows.Scan(&m.ID, &m.DotaMatchID, &m.State, &m.StartedAt, &m.EndedAt, &m.Winner, &m.Duration); err != nil {
+			return nil, err
+		}
+		matches = append(matches, m)
+	}
+	return matches, rows.Err()
+}
+
 func (s *SQLiteStore) GetLeaderboard(ctx context.Context, startDate, endDate *time.Time) ([]LeaderboardEntry, error) {
 	query := `
 		SELECT
@@ -452,6 +475,60 @@ func (s *SQLiteStore) ListMatchesWithPlayers(ctx context.Context, limit int) ([]
 			p.AvatarURL = avatar.String
 			if p.Name == "" {
 				p.Name = p.SteamID // Fallback to Steam ID if no name
+			}
+
+			if p.Team == "radiant" {
+				mwp.Radiant = append(mwp.Radiant, p)
+				if p.WasCaptain {
+					captain := p
+					mwp.RadiantCaptain = &captain
+				}
+			} else {
+				mwp.Dire = append(mwp.Dire, p)
+				if p.WasCaptain {
+					captain := p
+					mwp.DireCaptain = &captain
+				}
+			}
+		}
+		rows.Close()
+
+		result = append(result, mwp)
+	}
+
+	return result, nil
+}
+
+func (s *SQLiteStore) ListIncompleteMatchesWithPlayers(ctx context.Context, limit int) ([]MatchWithPlayers, error) {
+	matches, err := s.ListIncompleteMatches(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]MatchWithPlayers, 0, len(matches))
+	for _, m := range matches {
+		mwp := MatchWithPlayers{Match: m}
+
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT mp.steam_id, u.name, u.avatar_url, mp.team, mp.was_captain
+			 FROM match_players mp
+			 LEFT JOIN users u ON mp.steam_id = u.steam_id
+			 WHERE mp.match_id = ?`, m.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		for rows.Next() {
+			var p MatchPlayerInfo
+			var name, avatar sql.NullString
+			if err := rows.Scan(&p.SteamID, &name, &avatar, &p.Team, &p.WasCaptain); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			p.Name = name.String
+			p.AvatarURL = avatar.String
+			if p.Name == "" {
+				p.Name = p.SteamID
 			}
 
 			if p.Team == "radiant" {

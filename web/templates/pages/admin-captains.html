@@ -1,0 +1,74 @@
+{{define "admin-captains.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Captains - Dota Inhouse</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .admin-section { background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .admin-table { width: 100%; border-collapse: collapse; }
+        .admin-table th, .admin-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); }
+        .admin-table th { background: var(--bg-tertiary); font-weight: 600; }
+        .priority-select { padding:0.3rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); width:60px; }
+        .empty-state { color: var(--text-secondary); font-style: italic; padding: 1rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Admin Captain Priorities</h1>
+        <nav>
+            <a href="/" class="nav-link">Queue</a>
+            <a href="/history" class="nav-link">History</a>
+            <a href="/leaderboard" class="nav-link">Leaderboard</a>
+            <a href="/admin" class="nav-link" style="color: var(--accent-primary);">Admin</a>
+            {{if .User}}<span class="user-info">{{.User.Name}}</span><a href="/auth/logout" class="btn btn-secondary">Logout</a>{{end}}
+        </nav>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="admin-section">
+                <h3>Player Management ({{len .Users}} registered)</h3>
+                {{if .Users}}
+                <table class="admin-table">
+                    <thead><tr><th>Player</th><th>Steam ID</th><th>Captain Priority</th></tr></thead>
+                    <tbody>
+                        {{range .Users}}
+                        <tr>
+                            <td>{{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" style="width:24px;height:24px;border-radius:4px;vertical-align:middle;margin-right:0.5rem;">{{end}}{{.Name}}</td>
+                            <td><code>{{.SteamID}}</code></td>
+                            <td>
+                                {{$cp := .CaptainPriority}}
+                                <select class="priority-select" onchange="setPriority('{{.SteamID}}', this.value)">
+                                    {{range iterate 10}}
+                                    <option value="{{add . 1}}" {{if eq (add . 1) $cp}}selected{{end}}>{{add . 1}}</option>
+                                    {{end}}
+                                </select>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                {{else}}
+                <p class="empty-state">No registered users.</p>
+                {{end}}
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function setPriority(steamId, priority) {
+            fetch('/admin/player/' + steamId + '/priority/' + priority, { method: 'POST' })
+                .then(function(resp) {
+                    if (!resp.ok) {
+                        resp.text().then(function(t) { alert('Error: ' + t); });
+                    }
+                })
+                .catch(function(err) { alert('Error: ' + err); });
+        }
+    </script>
+</body>
+</html>
+{{end}}

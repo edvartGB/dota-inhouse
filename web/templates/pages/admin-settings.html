@@ -1,0 +1,48 @@
+{{define "admin-settings.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Settings - Dota Inhouse</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .admin-section { background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .settings-form { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+        .settings-form label { display:block; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.25rem; }
+        .settings-form select { padding:0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.9rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Admin Lobby Settings</h1>
+        <nav>
+            <a href="/" class="nav-link">Queue</a>
+            <a href="/history" class="nav-link">History</a>
+            <a href="/leaderboard" class="nav-link">Leaderboard</a>
+            <a href="/admin" class="nav-link" style="color: var(--accent-primary);">Admin</a>
+            {{if .User}}<span class="user-info">{{.User.Name}}</span><a href="/auth/logout" class="btn btn-secondary">Logout</a>{{end}}
+        </nav>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="admin-section">
+                <h3>Lobby Settings</h3>
+                <form class="settings-form" action="/admin/settings" method="POST">
+                    <div>
+                        <label for="game_mode">Game Mode</label>
+                        <select name="game_mode" id="game_mode">
+                            {{range $key, $name := .ValidGameModes}}
+                            <option value="{{$key}}" {{if eq $key $.LobbySettings.GameMode}}selected{{end}}>{{$name}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-small">Save Settings</button>
+                </form>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
+{{end}}

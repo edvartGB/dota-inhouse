@@ -136,6 +136,11 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Use(auth.AdminMiddleware(s.adminConfig, s.sessions))
 
 		r.Get("/admin", s.handleAdminPage)
+		r.Get("/admin/queue", s.handleAdminQueuePage)
+		r.Get("/admin/matches", s.handleAdminMatchesPage)
+		r.Get("/admin/captains", s.handleAdminCaptainsPage)
+		r.Get("/admin/settings", s.handleAdminSettingsPage)
+		r.Get("/admin/broken-matches", s.handleAdminBrokenMatchesPage)
 		r.Get("/admin/state", s.handleAdminState)
 		r.Post("/admin/match/{matchID}/cancel", s.handleAdminCancelMatch)
 		r.Post("/admin/match/{matchID}/result/{winner}", s.handleAdminSetResult)
@@ -143,6 +148,7 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Post("/admin/player/{playerID}/priority/{priority}", s.handleAdminSetCaptainPriority)
 		r.Post("/admin/settings", s.handleAdminSetLobbySettings)
 		r.Post("/admin/history/{matchID}/result/{winner}", s.handleAdminSetHistoryResult)
+		r.Post("/admin/history/{matchID}/repair", s.handleAdminRepairHistoryMatch)
 		r.Get("/admin/logs", s.handleAdminLogs)
 	})
 }

@@ -2,16 +2,26 @@ package web
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/edvart/dota-inhouse/internal/auth"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/store"
 	"github.com/go-chi/chi/v5"
 )
+
+type brokenMatchData struct {
+	store.MatchWithPlayers
+	PlayerCount   int
+	MissingFields []string
+}
 
 // handleAdminPage renders the admin dashboard.
 func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
@@ -23,18 +33,101 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to list users: %v", err)
 	}
 
+	brokenMatches, err := s.loadBrokenMatches(r.Context(), matches)
+	if err != nil {
+		log.Printf("Failed to list broken matches: %v", err)
+	}
+
 	data := map[string]interface{}{
-		"User":           user,
-		"Queue":          queue,
-		"Matches":        matches,
-		"Users":          users,
-		"LobbySettings":  lobbySettings,
-		"ValidGameModes": coordinator.ValidGameModes,
-		"IsAdmin":        true,
-		"LogLines":       s.readLogTail(50),
+		"User":          user,
+		"QueueCount":    len(queue),
+		"MatchCount":    len(matches),
+		"BrokenCount":   len(brokenMatches),
+		"UsersCount":    len(users),
+		"CurrentMode":   coordinator.ValidGameModes[lobbySettings.GameMode],
+		"CurrentModeID": lobbySettings.GameMode,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "admin.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAdminQueuePage(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	queue, _, _ := s.coordinator.GetState()
+
+	data := map[string]interface{}{
+		"User":  user,
+		"Queue": queue,
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "admin-queue.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAdminMatchesPage(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	_, matches, _ := s.coordinator.GetState()
+
+	data := map[string]interface{}{
+		"User":    user,
+		"Matches": matches,
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "admin-matches.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAdminCaptainsPage(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	users, err := s.store.ListUsers(r.Context())
+	if err != nil {
+		log.Printf("Failed to list users: %v", err)
+	}
+
+	data := map[string]interface{}{
+		"User":  user,
+		"Users": users,
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "admin-captains.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAdminSettingsPage(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	_, _, lobbySettings := s.coordinator.GetState()
+
+	data := map[string]interface{}{
+		"User":           user,
+		"LobbySettings":  lobbySettings,
+		"ValidGameModes": coordinator.ValidGameModes,
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "admin-settings.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAdminBrokenMatchesPage(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	_, matches, _ := s.coordinator.GetState()
+
+	brokenMatches, err := s.loadBrokenMatches(r.Context(), matches)
+	if err != nil {
+		log.Printf("Failed to list broken matches: %v", err)
+	}
+
+	data := map[string]interface{}{
+		"User":          user,
+		"BrokenMatches": brokenMatches,
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "admin-broken-matches.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -91,6 +184,12 @@ func (s *Server) handleAdminSetResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist immediately so a restart before match recorder flush won't leave a broken row.
+	if err := s.finalizeStoredMatch(r.Context(), matchID, winner, "", "", ""); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	log.Printf("Admin set active match %s result: %s wins", matchID[:8], winner)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -103,18 +202,68 @@ func (s *Server) handleAdminSetHistoryResult(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	winner := chi.URLParam(r, "winner")
-	if winner != "radiant" && winner != "dire" {
-		http.Error(w, "winner must be 'radiant' or 'dire'", http.StatusBadRequest)
+	winner, err := parseWinnerInput(chi.URLParam(r, "winner"), true)
+	if err != nil {
+		http.Error(w, "winner must be 'radiant', 'dire', or 'none'", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.store.SetMatchWinner(r.Context(), matchID, winner); err != nil {
+	match, err := s.store.GetMatch(r.Context(), matchID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if match == nil {
+		http.Error(w, "match not found", http.StatusBadRequest)
+		return
+	}
+
+	match.Winner = winner
+	if err := s.store.UpdateMatch(r.Context(), match); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Admin set history match %s result: %s wins", matchID[:8], winner)
+	if winner == nil {
+		log.Printf("Admin cleared history match %s result", matchID[:8])
+	} else {
+		log.Printf("Admin set history match %s result: %s wins", matchID[:8], *winner)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleAdminRepairHistoryMatch marks an incomplete match as completed and fills missing metadata.
+func (s *Server) handleAdminRepairHistoryMatch(w http.ResponseWriter, r *http.Request) {
+	matchID := chi.URLParam(r, "matchID")
+	if matchID == "" {
+		http.Error(w, "match ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	winner := strings.TrimSpace(r.FormValue("winner"))
+	endedAt := strings.TrimSpace(r.FormValue("ended_at"))
+	endedDate := strings.TrimSpace(r.FormValue("ended_date"))
+	endedTime := strings.TrimSpace(r.FormValue("ended_time"))
+	duration := strings.TrimSpace(r.FormValue("duration"))
+	dotaMatchID := strings.TrimSpace(r.FormValue("dota_match_id"))
+	if endedAt == "" && endedDate != "" {
+		if endedTime == "" {
+			endedTime = "00:00"
+		}
+		endedAt = endedDate + "T" + endedTime
+	}
+
+	if err := s.finalizeStoredMatch(r.Context(), matchID, winner, endedAt, duration, dotaMatchID); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Admin repaired history match %s", matchID[:8])
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -190,7 +339,7 @@ func (s *Server) handleAdminSetLobbySettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
 // handleAdminLogs renders the last N lines of the log file.
@@ -264,4 +413,160 @@ func (s *Server) handleAdminState(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
+}
+
+func missingMatchFields(m store.MatchWithPlayers, playerCount int) []string {
+	missing := make([]string, 0, 5)
+	if m.Winner == nil {
+		missing = append(missing, "winner")
+	}
+	if m.EndedAt == nil {
+		missing = append(missing, "ended_at")
+	}
+	if m.Duration == nil {
+		missing = append(missing, "duration")
+	}
+	if m.DotaMatchID == 0 {
+		missing = append(missing, "dota_match_id")
+	}
+	if playerCount < 10 {
+		missing = append(missing, "players")
+	}
+	return missing
+}
+
+func (s *Server) loadBrokenMatches(ctx context.Context, activeMatches map[string]*coordinator.Match) ([]brokenMatchData, error) {
+	incompleteMatches, err := s.store.ListIncompleteMatchesWithPlayers(ctx, 100)
+	if err != nil {
+		return nil, err
+	}
+
+	activeMatchIDs := make(map[string]struct{}, len(activeMatches))
+	for id := range activeMatches {
+		activeMatchIDs[id] = struct{}{}
+	}
+
+	brokenMatches := make([]brokenMatchData, 0, len(incompleteMatches))
+	for _, m := range incompleteMatches {
+		if _, isActive := activeMatchIDs[m.ID]; isActive {
+			continue
+		}
+		playerCount := len(m.Radiant) + len(m.Dire)
+		brokenMatches = append(brokenMatches, brokenMatchData{
+			MatchWithPlayers: m,
+			PlayerCount:      playerCount,
+			MissingFields:    missingMatchFields(m, playerCount),
+		})
+	}
+
+	return brokenMatches, nil
+}
+
+func (s *Server) finalizeStoredMatch(ctx context.Context, matchID, winner, endedAtInput, durationInput, dotaMatchIDInput string) error {
+	match, err := s.store.GetMatch(ctx, matchID)
+	if err != nil {
+		return err
+	}
+	if match == nil {
+		return errBadRequest("match not found")
+	}
+
+	winnerValue, err := parseWinnerInput(winner, true)
+	if err != nil {
+		return errBadRequest("winner must be 'radiant', 'dire', or 'none'")
+	}
+
+	endedAt, err := parseEndedAtInput(endedAtInput)
+	if err != nil {
+		return errBadRequest("ended_at must use format YYYY-MM-DDTHH:MM (or provide ended_date + ended_time)")
+	}
+	if endedAt == nil {
+		now := time.Now()
+		endedAt = &now
+	}
+
+	duration, err := parseDurationInput(durationInput)
+	if err != nil {
+		return errBadRequest("duration must be a non-negative integer (seconds)")
+	}
+
+	dotaMatchID, err := parseDotaMatchIDInput(dotaMatchIDInput)
+	if err != nil {
+		return errBadRequest("dota_match_id must be a positive integer")
+	}
+
+	match.State = "completed"
+	match.Winner = winnerValue
+	match.EndedAt = endedAt
+	if duration != nil {
+		match.Duration = duration
+	}
+	if dotaMatchID != nil {
+		match.DotaMatchID = *dotaMatchID
+	}
+
+	return s.store.UpdateMatch(ctx, match)
+}
+
+func parseWinnerInput(raw string, allowNone bool) (*string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "radiant", "dire":
+		winner := strings.ToLower(strings.TrimSpace(raw))
+		return &winner, nil
+	case "", "none", "null":
+		if allowNone {
+			return nil, nil
+		}
+	}
+	return nil, errBadRequest("invalid winner")
+}
+
+func parseEndedAtInput(raw string) (*time.Time, error) {
+	if raw == "" {
+		return nil, nil
+	}
+
+	if t, err := time.ParseInLocation("2006-01-02T15:04", raw, time.Local); err == nil {
+		return &t, nil
+	}
+
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return &t, nil
+	}
+
+	return nil, errBadRequest("invalid ended_at")
+}
+
+func parseDurationInput(raw string) (*int, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < 0 {
+		return nil, errBadRequest("invalid duration")
+	}
+	return &v, nil
+}
+
+func parseDotaMatchIDInput(raw string) (*uint64, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	v, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || v == 0 {
+		return nil, errBadRequest("invalid dota match id")
+	}
+	return &v, nil
+}
+
+func errBadRequest(msg string) error {
+	return &badRequestError{msg: msg}
+}
+
+type badRequestError struct {
+	msg string
+}
+
+func (e *badRequestError) Error() string {
+	return e.msg
 }

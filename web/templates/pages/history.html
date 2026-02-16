@@ -57,6 +57,12 @@
                         hx-confirm="Set Dire as winner?">
                         Dire Win
                     </button>
+                    <button class="btn btn-small" style="background: var(--text-secondary); color: #fff; padding: 0.2rem 0.5rem; font-size: 0.75rem;"
+                        hx-post="/admin/history/{{.ID}}/result/none"
+                        hx-swap="none"
+                        hx-confirm="Clear winner and mark as no result?">
+                        No Result
+                    </button>
                 </span>
                 {{end}}
                 {{$duration := formatDuration .Duration}}
