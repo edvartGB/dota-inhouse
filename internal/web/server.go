@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/auth"
@@ -246,13 +248,103 @@ type LeaderboardPageData struct {
 	StartDate  string
 	EndDate    string
 	FilterName string
+	Preset     string
+	SortBy     string
+	SortDir    string
 	DevMode    bool
+}
+
+func sanitizeLeaderboardSort(sortBy, sortDir string) (string, string) {
+	sortBy = strings.ToLower(sortBy)
+	sortDir = strings.ToLower(sortDir)
+
+	switch sortBy {
+	case "name", "wins", "losses", "delta", "winrate", "streak":
+	default:
+		sortBy = "delta"
+	}
+
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
+	return sortBy, sortDir
+}
+
+func compareLeaderboardField(a, b store.LeaderboardEntry, sortBy string) int {
+	switch sortBy {
+	case "name":
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	case "wins":
+		return compareInt(a.Wins, b.Wins)
+	case "losses":
+		return compareInt(a.Losses, b.Losses)
+	case "winrate":
+		return compareFloat(a.WinRate, b.WinRate)
+	case "streak":
+		return compareInt(a.Streak, b.Streak)
+	default:
+		return compareInt(a.Delta, b.Delta)
+	}
+}
+
+func compareLeaderboardTieBreak(a, b store.LeaderboardEntry) int {
+	if cmp := compareInt(b.Delta, a.Delta); cmp != 0 {
+		return cmp
+	}
+	if cmp := compareInt(b.Total, a.Total); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+}
+
+func compareInt(a, b int) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func compareFloat(a, b float64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func sortLeaderboardEntries(entries []store.LeaderboardEntry, sortBy, sortDir string) {
+	direction := 1
+	if sortDir == "desc" {
+		direction = -1
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool {
+		a := entries[i]
+		b := entries[j]
+
+		cmp := compareLeaderboardField(a, b, sortBy)
+		if cmp == 0 {
+			cmp = compareLeaderboardTieBreak(a, b)
+		}
+
+		return cmp*direction < 0
+	})
 }
 
 func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	user, _ := s.sessions.GetUser(r.Context(), r)
 
 	var startDate, endDate *time.Time
+	preset := r.URL.Query().Get("preset")
+	sortBy, sortDir := sanitizeLeaderboardSort(r.URL.Query().Get("sort"), r.URL.Query().Get("dir"))
 	startStr := r.URL.Query().Get("start")
 	endStr := r.URL.Query().Get("end")
 	filterName := "All Time"
@@ -269,7 +361,6 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	preset := r.URL.Query().Get("preset")
 	now := time.Now()
 	switch preset {
 	case "week":
@@ -296,6 +387,7 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to load leaderboard", http.StatusInternalServerError)
 		return
 	}
+	sortLeaderboardEntries(entries, sortBy, sortDir)
 
 	data := LeaderboardPageData{
 		User:       user,
@@ -303,7 +395,18 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		StartDate:  startStr,
 		EndDate:    endStr,
 		FilterName: filterName,
+		Preset:     preset,
+		SortBy:     sortBy,
+		SortDir:    sortDir,
 		DevMode:    s.devMode,
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		if err := s.templates.ExecuteTemplate(w, "leaderboard-table", data); err != nil {
+			log.Printf("Template error: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+		return
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "leaderboard.html", data); err != nil {
