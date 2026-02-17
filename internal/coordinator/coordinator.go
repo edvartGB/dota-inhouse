@@ -700,11 +700,25 @@ func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
 	log.Printf("Admin cancelled match %s (state: %v, return to queue: %v)", cmd.MatchID, match.State, cmd.ReturnToQueue)
 
 	if cmd.ReturnToQueue {
+		// Return cancelled-match players to the front of the queue, preserving
+		// their match order and avoiding duplicates.
+		matchPlayerIDs := make(map[string]struct{}, len(match.Players))
+		front := make([]Player, 0, len(match.Players))
 		for _, p := range match.Players {
+			matchPlayerIDs[p.SteamID] = struct{}{}
 			if !c.state.IsPlayerInQueue(p.SteamID) {
-				c.state.Queue = append(c.state.Queue, p)
+				front = append(front, p)
 			}
 		}
+
+		back := make([]Player, 0, len(c.state.Queue))
+		for _, queued := range c.state.Queue {
+			if _, inCancelledMatch := matchPlayerIDs[queued.SteamID]; !inCancelledMatch {
+				back = append(back, queued)
+			}
+		}
+
+		c.state.Queue = append(front, back...)
 	}
 
 	c.emit(MatchCancelledByAdmin{
