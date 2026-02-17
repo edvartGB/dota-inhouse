@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -91,15 +92,67 @@ func (s *Server) handleAdminCaptainsPage(w http.ResponseWriter, r *http.Request)
 		log.Printf("Failed to list users: %v", err)
 	}
 
+	sortBy, sortDir := sanitizeAdminCaptainSort(r.URL.Query().Get("sort"), r.URL.Query().Get("dir"))
+	sortAdminCaptainUsers(users, sortBy, sortDir)
+
 	data := map[string]interface{}{
-		"User":  user,
-		"Users": users,
+		"User":    user,
+		"Users":   users,
+		"SortBy":  sortBy,
+		"SortDir": sortDir,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "admin-captains.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+func sanitizeAdminCaptainSort(sortBy, sortDir string) (string, string) {
+	sortBy = strings.ToLower(strings.TrimSpace(sortBy))
+	sortDir = strings.ToLower(strings.TrimSpace(sortDir))
+
+	switch sortBy {
+	case "name", "steamid", "priority":
+	default:
+		sortBy = "name"
+	}
+
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "asc"
+	}
+
+	return sortBy, sortDir
+}
+
+func sortAdminCaptainUsers(users []store.User, sortBy, sortDir string) {
+	sort.SliceStable(users, func(i, j int) bool {
+		a := users[i]
+		b := users[j]
+
+		var cmp int
+		switch sortBy {
+		case "steamid":
+			cmp = strings.Compare(strings.ToLower(a.SteamID), strings.ToLower(b.SteamID))
+		case "priority":
+			cmp = compareInt(a.CaptainPriority, b.CaptainPriority)
+		default:
+			cmp = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		}
+
+		if cmp == 0 {
+			cmp = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		}
+		if cmp == 0 {
+			cmp = strings.Compare(strings.ToLower(a.SteamID), strings.ToLower(b.SteamID))
+		}
+
+		if sortDir == "desc" {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
+}
+
 
 func (s *Server) handleAdminSettingsPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())

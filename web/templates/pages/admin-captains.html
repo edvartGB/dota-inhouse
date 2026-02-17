@@ -11,6 +11,9 @@
         .admin-table { width: 100%; border-collapse: collapse; }
         .admin-table th, .admin-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); }
         .admin-table th { background: var(--bg-tertiary); font-weight: 600; }
+        .sort-link { color: var(--text-primary); text-decoration: none; }
+        .sort-link:hover { color: var(--accent-primary); }
+        .sort-indicator { color: var(--text-secondary); margin-left: 0.3rem; font-size: 0.85em; }
         .priority-select { padding:0.3rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); width:60px; }
         .empty-state { color: var(--text-secondary); font-style: italic; padding: 1rem; }
     </style>
@@ -34,7 +37,28 @@
                 <h3>Player Management ({{len .Users}} registered)</h3>
                 {{if .Users}}
                 <table class="admin-table">
-                    <thead><tr><th>Player</th><th>Steam ID</th><th>Captain Priority</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>
+                                <a class="sort-link" href="/admin/captains?sort=name&dir={{if and (eq .SortBy "name") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
+                                    Player
+                                    <span class="sort-indicator">{{if eq .SortBy "name"}}{{if eq .SortDir "asc"}}▲{{else}}▼{{end}}{{else}}↕{{end}}</span>
+                                </a>
+                            </th>
+                            <th>
+                                <a class="sort-link" href="/admin/captains?sort=steamid&dir={{if and (eq .SortBy "steamid") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
+                                    Steam ID
+                                    <span class="sort-indicator">{{if eq .SortBy "steamid"}}{{if eq .SortDir "asc"}}▲{{else}}▼{{end}}{{else}}↕{{end}}</span>
+                                </a>
+                            </th>
+                            <th>
+                                <a class="sort-link" href="/admin/captains?sort=priority&dir={{if and (eq .SortBy "priority") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
+                                    Captain Priority
+                                    <span class="sort-indicator">{{if eq .SortBy "priority"}}{{if eq .SortDir "asc"}}▲{{else}}▼{{end}}{{else}}↕{{end}}</span>
+                                </a>
+                            </th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {{range .Users}}
                         <tr>
