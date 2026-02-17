@@ -146,7 +146,11 @@ func (b *Bot) IsAvailable() bool {
 	return b.loggedIn && !b.busy
 }
 
-const LobbyJoinTimeout = 5 * time.Minute
+const (
+	LobbyJoinTimeout         = 5 * time.Minute
+	LobbyRelaunchDelay       = 3 * time.Second
+	MaxLobbyRelaunchAttempts = 2
+)
 
 func gameModeFromString(mode string) protocol.DOTA_GameMode {
 	switch mode {
@@ -264,11 +268,19 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 	var currentLobby *protocol.CSODOTALobby // Track latest lobby state
 	launched := false
 	gameEnded := false
+	relaunchAttempts := 0
 	var endGameOnce sync.Once
+	var relaunchTimer *time.Timer
+	var relaunchTimerCh <-chan time.Time
 
 	// Start lobby join timeout
 	timeoutTimer := time.NewTimer(LobbyJoinTimeout)
 	defer timeoutTimer.Stop()
+	defer func() {
+		if relaunchTimer != nil {
+			relaunchTimer.Stop()
+		}
+	}()
 
 	log.Printf("[%s] Started monitoring lobby state (timeout: %v)", b.name, LobbyJoinTimeout)
 
@@ -302,12 +314,31 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 			currentState := dota2Lobby.GetState()
 
 			if currentState != lastState {
-				log.Printf("[%s] Lobby state changed: %v -> %v", b.name, lastState, currentState)
+				prevState := lastState
+				log.Printf("[%s] Lobby state changed: %v -> %v", b.name, prevState, currentState)
 				lastState = currentState
 
 				switch currentState {
 				case protocol.CSODOTALobby_UI:
 					log.Printf("[%s] Lobby in UI state (setup)", b.name)
+					// Some lobbies regress RUN -> UI when players fail to connect.
+					// Schedule a delayed relaunch if this happens.
+					if prevState == protocol.CSODOTALobby_RUN && !gameEnded {
+						launched = false
+						if relaunchAttempts < MaxLobbyRelaunchAttempts {
+							relaunchAttempts++
+							if relaunchTimer != nil {
+								relaunchTimer.Stop()
+							}
+							relaunchTimer = time.NewTimer(LobbyRelaunchDelay)
+							relaunchTimerCh = relaunchTimer.C
+							log.Printf("[%s] Lobby regressed RUN -> UI, scheduling relaunch attempt %d/%d in %v",
+								b.name, relaunchAttempts, MaxLobbyRelaunchAttempts, LobbyRelaunchDelay)
+						} else {
+							log.Printf("[%s] Lobby regressed RUN -> UI but max relaunch attempts reached (%d)",
+								b.name, MaxLobbyRelaunchAttempts)
+						}
+					}
 
 				case protocol.CSODOTALobby_READYUP:
 					log.Printf("[%s] Ready check phase", b.name)
@@ -345,10 +376,41 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 				if b.checkAllPlayersCorrect(dota2Lobby, expectedTeam) {
 					log.Printf("[%s] All players on correct teams! Starting game...", b.name)
 					launched = true
-					timeoutTimer.Stop() // Cancel timeout since we're launching
+					if !timeoutTimer.Stop() {
+						select {
+						case <-timeoutTimer.C:
+						default:
+						}
+					}
 					b.dota2Client.LaunchLobby()
 					log.Printf("[%s] Game launch command sent!", b.name)
 				}
+			}
+
+		case <-relaunchTimerCh:
+			relaunchTimerCh = nil
+			if gameEnded || launched || currentLobby == nil {
+				continue
+			}
+			if currentLobby.GetState() != protocol.CSODOTALobby_UI {
+				continue
+			}
+
+			if b.checkAllPlayersCorrect(currentLobby, expectedTeam) {
+				log.Printf("[%s] Relaunching game after RUN -> UI regression (attempt %d/%d)",
+					b.name, relaunchAttempts, MaxLobbyRelaunchAttempts)
+				launched = true
+				if !timeoutTimer.Stop() {
+					select {
+					case <-timeoutTimer.C:
+					default:
+					}
+				}
+				b.dota2Client.LaunchLobby()
+				log.Printf("[%s] Relaunch command sent!", b.name)
+			} else {
+				log.Printf("[%s] Skipping relaunch attempt %d/%d: players not in correct teams",
+					b.name, relaunchAttempts, MaxLobbyRelaunchAttempts)
 			}
 		}
 	}
