@@ -408,9 +408,6 @@ main {
     overflow: hidden;
     margin-top: 0.5rem;
 }
-.player-special {
-    background-color: pink;
-}
 
 .progress {
     height: 100%;

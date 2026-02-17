@@ -3,47 +3,11 @@ package web
 import (
 	"fmt"
 	"html/template"
-	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 )
-
-// LoadTemplates loads all templates from the filesystem.
-func LoadTemplates(templatesFS fs.FS) (*template.Template, error) {
-	funcs := templateFuncs()
-
-	tmpl := template.New("").Funcs(funcs)
-
-	// Parse all template files
-	patterns := []string{
-		"layouts/*.html",
-		"pages/*.html",
-		"partials/*.html",
-	}
-
-	for _, pattern := range patterns {
-		matches, err := fs.Glob(templatesFS, pattern)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, match := range matches {
-			content, err := fs.ReadFile(templatesFS, match)
-			if err != nil {
-				return nil, err
-			}
-
-			_, err = tmpl.Parse(string(content))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return tmpl, nil
-}
 
 // templateFuncs returns the common template functions.
 func templateFuncs() template.FuncMap {
