@@ -16,9 +16,9 @@ const (
 
 // Manager manages a pool of Steam bots.
 type Manager struct {
-	bots         []*Bot
-	commands     chan<- coordinator.Command
-	mu           sync.Mutex
+	bots          []*Bot
+	commands      chan<- coordinator.Command
+	mu            sync.Mutex
 	matchToBotCtx map[string]context.CancelFunc
 }
 
@@ -75,6 +75,10 @@ func (m *Manager) Run(ctx context.Context, events <-chan coordinator.Event) {
 			case coordinator.MatchCancelled:
 				m.cancelMatch(e.MatchID)
 			case coordinator.MatchCancelledByAdmin:
+				m.cancelMatch(e.MatchID)
+			case coordinator.MatchCompleted:
+				// Includes admin-forced results; once completed we should stop
+				// tracking the lobby and free the bot immediately.
 				m.cancelMatch(e.MatchID)
 			}
 		}

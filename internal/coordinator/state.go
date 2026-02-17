@@ -72,6 +72,7 @@ type State struct {
 	Queue         []Player          // Players waiting for a match
 	Matches       map[string]*Match // Active matches keyed by match ID
 	LobbySettings LobbySettings     // Configurable lobby settings
+	QueueOpen     bool              // Whether new joins are allowed
 }
 
 func NewState() *State {
@@ -79,6 +80,7 @@ func NewState() *State {
 		Queue:         []Player{},
 		Matches:       make(map[string]*Match),
 		LobbySettings: DefaultLobbySettings(),
+		QueueOpen:     false, // closed by default on startup
 	}
 }
 

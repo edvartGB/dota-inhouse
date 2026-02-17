@@ -11,6 +11,8 @@
         .settings-form { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
         .settings-form label { display:block; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.25rem; }
         .settings-form select { padding:0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.9rem; }
+        .queue-controls { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; }
+        .queue-status { font-size:0.85rem; color:var(--text-secondary); }
     </style>
 </head>
 <body>
@@ -40,6 +42,18 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Save Settings</button>
                 </form>
+            </div>
+            <div class="admin-section">
+                <h3>Queue Controls</h3>
+                <div class="queue-controls">
+                    <span class="queue-status">Current status: {{if .QueueOpen}}Open{{else}}Closed{{end}}</span>
+                    <form action="/admin/queue/open" method="POST">
+                        <button type="submit" class="btn btn-primary btn-small" {{if .QueueOpen}}disabled{{end}}>Open Queue</button>
+                    </form>
+                    <form action="/admin/queue/close" method="POST">
+                        <button type="submit" class="btn btn-danger btn-small" {{if not .QueueOpen}}disabled{{end}}>Close Queue</button>
+                    </form>
+                </div>
             </div>
         </div>
     </main>

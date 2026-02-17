@@ -104,11 +104,13 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			}
 		}
 		inMatch := h.coordinator.GetPlayerMatch(userID) != nil
+		_, _, _, queueOpen := h.coordinator.GetState()
 		data := struct {
-			Queue   []coordinator.Player
-			InQueue bool
-			InMatch bool
-		}{Queue: e.Queue, InQueue: inQueue, InMatch: inMatch}
+			Queue     []coordinator.Player
+			InQueue   bool
+			InMatch   bool
+			QueueOpen bool
+		}{Queue: e.Queue, InQueue: inQueue, InMatch: inMatch, QueueOpen: queueOpen}
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", data); err != nil {
 			log.Printf("Failed to render queue: %v", err)
 			return ""
@@ -239,7 +241,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _, _ := h.coordinator.GetState()
+			queue, _, _, queueOpen := h.coordinator.GetState()
 			inQueue := false
 			for _, p := range queue {
 				if p.SteamID == userID {
@@ -248,10 +250,11 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 				}
 			}
 			queueData := struct {
-				Queue   []coordinator.Player
-				InQueue bool
-				InMatch bool
-			}{Queue: queue, InQueue: inQueue, InMatch: false}
+				Queue     []coordinator.Player
+				InQueue   bool
+				InMatch   bool
+				QueueOpen bool
+			}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after draft cancelled: %v", err)
 			}
@@ -267,7 +270,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _, _ := h.coordinator.GetState()
+			queue, _, _, queueOpen := h.coordinator.GetState()
 			inQueue := false
 			for _, p := range queue {
 				if p.SteamID == userID {
@@ -276,10 +279,11 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 				}
 			}
 			queueData := struct {
-				Queue   []coordinator.Player
-				InQueue bool
-				InMatch bool
-			}{Queue: queue, InQueue: inQueue, InMatch: false}
+				Queue     []coordinator.Player
+				InQueue   bool
+				InMatch   bool
+				QueueOpen bool
+			}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after lobby cancelled: %v", err)
 			}
@@ -312,7 +316,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			log.Printf("Failed to render match completed: %v", err)
 			return ""
 		}
-		queue, _, _ := h.coordinator.GetState()
+		queue, _, _, queueOpen := h.coordinator.GetState()
 		inQueue := false
 		for _, p := range queue {
 			if p.SteamID == userID {
@@ -321,10 +325,11 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			}
 		}
 		queueData := struct {
-			Queue   []coordinator.Player
-			InQueue bool
-			InMatch bool
-		}{Queue: queue, InQueue: inQueue, InMatch: false}
+			Queue     []coordinator.Player
+			InQueue   bool
+			InMatch   bool
+			QueueOpen bool
+		}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 			log.Printf("Failed to render queue after match completed: %v", err)
 		}
@@ -348,7 +353,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		if e.ReturnedToQueue {
-			queue, _, _ := h.coordinator.GetState()
+			queue, _, _, queueOpen := h.coordinator.GetState()
 			inQueue := false
 			for _, p := range queue {
 				if p.SteamID == userID {
@@ -357,10 +362,11 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 				}
 			}
 			queueData := struct {
-				Queue   []coordinator.Player
-				InQueue bool
-				InMatch bool
-			}{Queue: queue, InQueue: inQueue, InMatch: false}
+				Queue     []coordinator.Player
+				InQueue   bool
+				InMatch   bool
+				QueueOpen bool
+			}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after admin cancel: %v", err)
 			}
@@ -388,7 +394,7 @@ type DraftData struct {
 }
 
 func (h *SSEHub) renderInitialState(userID string) string {
-	queue, matches, _ := h.coordinator.GetState()
+	queue, matches, _, queueOpen := h.coordinator.GetState()
 
 	inQueue := false
 	for _, p := range queue {
@@ -408,10 +414,11 @@ func (h *SSEHub) renderInitialState(userID string) string {
 	var buf bytes.Buffer
 
 	queueData := struct {
-		Queue   []coordinator.Player
-		InQueue bool
-		InMatch bool
-	}{Queue: queue, InQueue: inQueue, InMatch: inMatch}
+		Queue     []coordinator.Player
+		InQueue   bool
+		InMatch   bool
+		QueueOpen bool
+	}{Queue: queue, InQueue: inQueue, InMatch: inMatch, QueueOpen: queueOpen}
 	if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 		log.Printf("Failed to render initial queue: %v", err)
 		return ""
@@ -429,7 +436,7 @@ func (h *SSEHub) renderInitialState(userID string) string {
 }
 
 func (h *SSEHub) renderActiveMatches() string {
-	_, matches, _ := h.coordinator.GetState()
+	_, matches, _, _ := h.coordinator.GetState()
 
 	matchList := make([]*coordinator.Match, 0, len(matches))
 	for _, m := range matches {

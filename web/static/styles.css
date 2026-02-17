@@ -116,6 +116,31 @@ main {
 .queue-panel h3 {
     margin-bottom: 1rem;
     font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.queue-status {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.queue-status.open {
+    border-color: var(--accent-radiant);
+    color: var(--accent-radiant);
+}
+
+.queue-status.closed {
+    border-color: var(--accent-dire);
+    color: var(--accent-dire);
 }
 
 .player-list {

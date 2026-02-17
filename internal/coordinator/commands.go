@@ -108,3 +108,10 @@ type AdminSetLobbySettings struct {
 }
 
 func (AdminSetLobbySettings) command() {}
+
+type AdminSetQueueOpen struct {
+	Open     bool
+	Response chan error
+}
+
+func (AdminSetQueueOpen) command() {}

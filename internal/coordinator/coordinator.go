@@ -154,11 +154,14 @@ func (c *Coordinator) handleCommand(cmd Command) {
 		cmd.Response <- c.handleAdminKickFromQueue(cmd)
 	case AdminSetLobbySettings:
 		cmd.Response <- c.handleAdminSetLobbySettings(cmd)
+	case AdminSetQueueOpen:
+		cmd.Response <- c.handleAdminSetQueueOpen(cmd)
 	case getStateCmd:
 		cmd.Response <- stateSnapshot{
 			Queue:         c.state.Queue,
 			Matches:       c.state.Matches,
 			LobbySettings: c.state.LobbySettings,
+			QueueOpen:     c.state.QueueOpen,
 		}
 	case getPlayerMatchCmd:
 		cmd.Response <- c.state.GetPlayerMatch(cmd.PlayerID)
@@ -166,6 +169,10 @@ func (c *Coordinator) handleCommand(cmd Command) {
 }
 
 func (c *Coordinator) handleJoinQueue(cmd JoinQueue) error {
+	if !c.state.QueueOpen {
+		return errors.New("queue is closed")
+	}
+
 	if c.state.IsPlayerInQueue(cmd.Player.SteamID) {
 		return errors.New("already in queue")
 	}
@@ -618,13 +625,14 @@ type stateSnapshot struct {
 	Queue         []Player
 	Matches       map[string]*Match
 	LobbySettings LobbySettings
+	QueueOpen     bool
 }
 
-func (c *Coordinator) GetState() ([]Player, map[string]*Match, LobbySettings) {
+func (c *Coordinator) GetState() ([]Player, map[string]*Match, LobbySettings, bool) {
 	respCh := make(chan stateSnapshot, 1)
 	c.commands <- getStateCmd{Response: respCh}
 	resp := <-respCh
-	return resp.Queue, resp.Matches, resp.LobbySettings
+	return resp.Queue, resp.Matches, resp.LobbySettings, resp.QueueOpen
 }
 
 func (c *Coordinator) GetPlayerMatch(playerID string) *Match {
@@ -798,5 +806,16 @@ func (c *Coordinator) handleAdminSetLobbySettings(cmd AdminSetLobbySettings) err
 	c.state.LobbySettings = cmd.Settings
 	log.Printf("Admin updated lobby settings: game mode = %s", cmd.Settings.GameMode)
 
+	return nil
+}
+
+func (c *Coordinator) handleAdminSetQueueOpen(cmd AdminSetQueueOpen) error {
+	if c.state.QueueOpen == cmd.Open {
+		return nil
+	}
+
+	c.state.QueueOpen = cmd.Open
+	log.Printf("Admin set queue open=%v", c.state.QueueOpen)
+	c.emit(QueueUpdated{Queue: c.state.Queue})
 	return nil
 }

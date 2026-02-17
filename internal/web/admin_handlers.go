@@ -26,7 +26,7 @@ type brokenMatchData struct {
 // handleAdminPage renders the admin dashboard.
 func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
-	queue, matches, lobbySettings := s.coordinator.GetState()
+	queue, matches, lobbySettings, queueOpen := s.coordinator.GetState()
 
 	users, err := s.store.ListUsers(r.Context())
 	if err != nil {
@@ -46,6 +46,7 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 		"UsersCount":    len(users),
 		"CurrentMode":   coordinator.ValidGameModes[lobbySettings.GameMode],
 		"CurrentModeID": lobbySettings.GameMode,
+		"QueueOpen":     queueOpen,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "admin.html", data); err != nil {
@@ -55,7 +56,7 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminQueuePage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
-	queue, _, _ := s.coordinator.GetState()
+	queue, _, _, _ := s.coordinator.GetState()
 
 	data := map[string]interface{}{
 		"User":  user,
@@ -69,7 +70,7 @@ func (s *Server) handleAdminQueuePage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminMatchesPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
-	_, matches, _ := s.coordinator.GetState()
+	_, matches, _, _ := s.coordinator.GetState()
 
 	data := map[string]interface{}{
 		"User":    user,
@@ -100,12 +101,13 @@ func (s *Server) handleAdminCaptainsPage(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleAdminSettingsPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
-	_, _, lobbySettings := s.coordinator.GetState()
+	_, _, lobbySettings, queueOpen := s.coordinator.GetState()
 
 	data := map[string]interface{}{
 		"User":           user,
 		"LobbySettings":  lobbySettings,
 		"ValidGameModes": coordinator.ValidGameModes,
+		"QueueOpen":      queueOpen,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "admin-settings.html", data); err != nil {
@@ -115,7 +117,7 @@ func (s *Server) handleAdminSettingsPage(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleAdminBrokenMatchesPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
-	_, matches, _ := s.coordinator.GetState()
+	_, matches, _, _ := s.coordinator.GetState()
 
 	brokenMatches, err := s.loadBrokenMatches(r.Context(), matches)
 	if err != nil {
@@ -155,6 +157,34 @@ func (s *Server) handleAdminCancelMatch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	log.Printf("Admin cancelled match %s (requeue=%v)", matchID[:8], returnToQueue)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminSetQueueStatus(w http.ResponseWriter, r *http.Request) {
+	status := chi.URLParam(r, "status")
+	var open bool
+	switch status {
+	case "open":
+		open = true
+	case "close":
+		open = false
+	default:
+		http.Error(w, "status must be 'open' or 'close'", http.StatusBadRequest)
+		return
+	}
+
+	resp := make(chan error, 1)
+	s.coordinator.Send(coordinator.AdminSetQueueOpen{
+		Open:     open,
+		Response: resp,
+	})
+
+	if err := waitForResponse(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Admin set queue status: open=%v", open)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -389,7 +419,7 @@ func (s *Server) readLogTail(n int) []string {
 
 // handleAdminState returns the current state as JSON.
 func (s *Server) handleAdminState(w http.ResponseWriter, r *http.Request) {
-	queue, matches, lobbySettings := s.coordinator.GetState()
+	queue, matches, lobbySettings, queueOpen := s.coordinator.GetState()
 
 	matchList := make([]map[string]interface{}, 0)
 	for id, m := range matches {
@@ -409,6 +439,7 @@ func (s *Server) handleAdminState(w http.ResponseWriter, r *http.Request) {
 		"queue":         queue,
 		"matches":       matchList,
 		"lobbySettings": lobbySettings,
+		"queueOpen":     queueOpen,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
