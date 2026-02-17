@@ -11,8 +11,8 @@ import (
 )
 
 type Recorder struct {
-	store     store.Store
-	dotaAPI   *dotaapi.Client
+	store   store.Store
+	dotaAPI *dotaapi.Client
 }
 
 func New(s store.Store, dotaAPI *dotaapi.Client) *Recorder {
@@ -172,7 +172,7 @@ func (r *Recorder) addMatchPlayers(ctx context.Context, matchID string, radiant,
 }
 
 func (r *Recorder) fetchWithRetry(ctx context.Context, matchID uint64) (*dotaapi.MatchDetails, error) {
-	delays := []time.Duration{0, 30 * time.Second, 60 * time.Second, 120 * time.Second}
+	delays := []time.Duration{0, 10 * time.Second, 30 * time.Second}
 	var lastErr error
 	for i, delay := range delays {
 		if delay > 0 {
