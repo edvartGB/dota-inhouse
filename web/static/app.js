@@ -1,4 +1,6 @@
 let audioUnlocked = false;
+let unlockListenersAttached = false;
+let lastMatchFoundNotificationAt = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
     if ('serviceWorker' in navigator) {
@@ -18,13 +20,22 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Running in standalone mode');
         requestNotificationPermission();
     }
+
+    // Initial page render can already contain an accept dialog (non-HTMX path).
+    const initialAcceptDialog = document.querySelector('#match-area[data-play-notification="true"], #accept-dialog');
+    if (initialAcceptDialog) {
+        triggerMatchFoundNotification('initial-render');
+    }
 });
 
 // Play notification sound when HTMX loads an element with data-play-notification
 document.body.addEventListener('htmx:load', function(event) {
-    if (event.detail.elt.getAttribute('data-play-notification') === 'true') {
-        playNotificationSound();
-        notifyMatchFound();
+    const target = event.detail && event.detail.elt;
+    if (!target) return;
+
+    // Handle both exact element and nested swaps.
+    if (target.closest('[data-play-notification="true"]')) {
+        triggerMatchFoundNotification('htmx-load');
     }
 });
 
@@ -61,16 +72,34 @@ function unlockAudio() {
             notificationAudio.currentTime = 0;
             audioUnlocked = true;
             console.log("Audio unlocked");
+            detachUnlockListeners();
         })
-        .catch(() => { });
+        .catch((e) => {
+            // Keep listeners active; first interaction can fail under autoplay rules.
+            console.warn("Audio unlock attempt failed:", e);
+        });
 
     // Also request notification permission on interaction
     requestNotificationPermission();
 }
 
-document.addEventListener('click', unlockAudio, { once: true });
-document.addEventListener('keydown', unlockAudio, { once: true });
-document.addEventListener('touchstart', unlockAudio, { once: true });
+function attachUnlockListeners() {
+    if (unlockListenersAttached) return;
+    unlockListenersAttached = true;
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+}
+
+function detachUnlockListeners() {
+    if (!unlockListenersAttached) return;
+    unlockListenersAttached = false;
+    document.removeEventListener('click', unlockAudio);
+    document.removeEventListener('keydown', unlockAudio);
+    document.removeEventListener('touchstart', unlockAudio);
+}
+
+attachUnlockListeners();
 
 function playNotificationSound() {
     if (!audioUnlocked) return;
@@ -80,6 +109,17 @@ function playNotificationSound() {
     notificationAudio.play().catch(e => {
         console.warn("Audio play failed:", e);
     });
+}
+
+function triggerMatchFoundNotification(source) {
+    // Prevent duplicate triggers from near-simultaneous DOM/HTMX updates.
+    const now = Date.now();
+    if (now-lastMatchFoundNotificationAt < 1500) return;
+    lastMatchFoundNotificationAt = now;
+
+    playNotificationSound();
+    notifyMatchFound();
+    console.log(`Match-found notification triggered (${source})`);
 }
 
 function notifyMatchFound() {
