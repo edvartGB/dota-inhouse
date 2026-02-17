@@ -120,13 +120,30 @@ func (s *SQLiteStore) UpsertUser(ctx context.Context, user *User) error {
 		`INSERT INTO users (steam_id, name, avatar_url, captain_priority, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(steam_id) DO UPDATE SET
-		 	name = excluded.name,
 		 	avatar_url = excluded.avatar_url,
 		 	updated_at = excluded.updated_at`,
 		user.SteamID, user.Name, user.AvatarURL,
 		user.CaptainPriority, user.CreatedAt, user.UpdatedAt,
 	)
 	return err
+}
+
+func (s *SQLiteStore) UpdateUserDisplayName(ctx context.Context, steamID, displayName string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE users SET name = ?, updated_at = ? WHERE steam_id = ?`,
+		displayName, time.Now(), steamID,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
 }
 
 func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {

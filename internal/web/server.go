@@ -119,6 +119,8 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(s.sessions))
 
+		r.Get("/profile", s.handleProfilePage)
+		r.Post("/profile", s.handleProfileUpdate)
 		r.Post("/queue/join", s.handleJoinQueue)
 		r.Post("/queue/leave", s.handleLeaveQueue)
 		r.Post("/match/{matchID}/accept", s.handleAcceptMatch)

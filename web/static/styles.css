@@ -642,6 +642,109 @@ main {
     color: var(--text-primary);
 }
 
+.nav-link-active {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.profile-shell {
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.profile-card {
+    background: linear-gradient(180deg, #1f1f1f 0%, #171717 100%);
+    border: 1px solid #2a2a2a;
+    border-radius: 14px;
+    padding: 2rem;
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+}
+
+.profile-card-header {
+    margin-bottom: 1.25rem;
+}
+
+.profile-kicker {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent-primary);
+    margin-bottom: 0.4rem;
+    font-weight: 700;
+}
+
+.profile-card h2 {
+    font-size: 1.8rem;
+    margin-bottom: 0.45rem;
+    letter-spacing: 0.01em;
+}
+
+.profile-card p {
+    line-height: 1.45;
+}
+
+.profile-help {
+    color: var(--text-secondary);
+    max-width: 58ch;
+    font-size: 0.98rem;
+}
+
+.profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.profile-field label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.profile-form input {
+    background: #121212;
+    border: 1px solid #2f2f2f;
+    color: var(--text-primary);
+    border-radius: 8px;
+    padding: 0.75rem 0.85rem;
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.profile-form input:hover {
+    border-color: #3a3a3a;
+}
+
+.profile-form input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
+}
+
+.profile-limit {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.profile-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.4rem;
+}
+
+.profile-actions .btn {
+    min-width: 160px;
+    font-weight: 600;
+}
+
 /* Match History Page */
 .history-header {
     display: flex;
@@ -1006,6 +1109,27 @@ main {
 
     .draft-layout .available {
         order: -1;
+    }
+
+    .profile-shell {
+        max-width: 100%;
+    }
+
+    .profile-card {
+        padding: 1.2rem;
+        border-radius: 10px;
+    }
+
+    .profile-card h2 {
+        font-size: 1.45rem;
+    }
+
+    .profile-actions {
+        justify-content: stretch;
+    }
+
+    .profile-actions .btn {
+        width: 100%;
     }
 
     .draft-panel {

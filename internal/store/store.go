@@ -50,6 +50,7 @@ type MatchPlayerInfo struct {
 type Store interface {
 	GetUser(ctx context.Context, steamID string) (*User, error)
 	UpsertUser(ctx context.Context, user *User) error
+	UpdateUserDisplayName(ctx context.Context, steamID, displayName string) error
 	ListUsers(ctx context.Context) ([]User, error)
 	UpdateCaptainPriority(ctx context.Context, steamID string, priority int) error
 

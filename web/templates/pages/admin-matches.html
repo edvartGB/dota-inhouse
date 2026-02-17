@@ -28,7 +28,8 @@
             <a href="/" class="nav-link">Queue</a>
             <a href="/history" class="nav-link">History</a>
             <a href="/leaderboard" class="nav-link">Leaderboard</a>
-            <a href="/admin" class="nav-link" style="color: var(--accent-primary);">Admin</a>
+            <a href="/profile" class="nav-link">Profile</a>
+            <a href="/admin" class="nav-link nav-link-active">Admin</a>
             {{if .User}}<span class="user-info">{{.User.Name}}</span><a href="/auth/logout" class="btn btn-secondary">Logout</a>{{end}}
         </nav>
     </header>
