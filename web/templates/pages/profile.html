@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Profile - Dota Inhouse</title>
-    <link rel="stylesheet" href="/static/styles.css?v=1">
+    <link rel="stylesheet" href="/static/styles.css?v=4">
 </head>
 <body>
     <header>
@@ -29,7 +29,7 @@
                     <div class="profile-card-header">
                         <p class="profile-kicker">Account Settings</p>
                         <h2>Profile</h2>
-                        <p class="profile-help">Set your display name</p>
+                        <p class="profile-help">Set your display name and Discord details for match notifications.</p>
                     </div>
                     {{if .Error}}
                         <div class="notification error">{{.Error}}</div>
@@ -48,6 +48,35 @@
                                 autocomplete="nickname"
                             >
                             <p class="profile-limit">Up to 32 characters.</p>
+                        </div>
+
+                        <div class="profile-field">
+                            <label for="discord_username">Discord username (optional)</label>
+                            <input
+                                type="text"
+                                id="discord_username"
+                                name="discord_username"
+                                maxlength="64"
+                                value="{{.DiscordUsername}}"
+                                autocomplete="off"
+                                placeholder="@yourname"
+                            >
+                            <p class="profile-limit">Used for display in notifications. You can omit the leading @.</p>
+                        </div>
+
+                        <div class="profile-field">
+                            <label for="discord_user_id">Discord user ID (optional)</label>
+                            <input
+                                type="text"
+                                id="discord_user_id"
+                                name="discord_user_id"
+                                inputmode="numeric"
+                                pattern="[0-9]{17,20}"
+                                value="{{.DiscordUserID}}"
+                                autocomplete="off"
+                                placeholder="123456789012345678"
+                            >
+                            <p class="profile-limit">Needed for reliable Discord mentions by the bot.</p>
                         </div>
                         <div class="profile-actions">
                             <button type="submit" class="btn btn-primary">Save Changes</button>

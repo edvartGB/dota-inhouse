@@ -9,6 +9,8 @@ type User struct {
 	SteamID         string
 	Name            string
 	AvatarURL       string
+	DiscordUsername string
+	DiscordUserID   string
 	CaptainPriority int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -51,6 +53,7 @@ type Store interface {
 	GetUser(ctx context.Context, steamID string) (*User, error)
 	UpsertUser(ctx context.Context, user *User) error
 	UpdateUserDisplayName(ctx context.Context, steamID, displayName string) error
+	UpdateUserProfile(ctx context.Context, steamID, displayName, discordUsername, discordUserID string) error
 	ListUsers(ctx context.Context) ([]User, error)
 	UpdateCaptainPriority(ctx context.Context, steamID string, priority int) error
 

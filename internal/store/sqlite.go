@@ -38,6 +38,8 @@ func (s *SQLiteStore) migrate() error {
 			steam_id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			avatar_url TEXT,
+			discord_username TEXT,
+			discord_user_id TEXT,
 			captain_priority INTEGER DEFAULT 5,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -86,6 +88,8 @@ func (s *SQLiteStore) migrate() error {
 	// Run optional migrations that may fail (e.g., adding columns that might already exist)
 	optionalMigrations := []string{
 		`ALTER TABLE matches ADD COLUMN duration INTEGER`,
+		`ALTER TABLE users ADD COLUMN discord_username TEXT`,
+		`ALTER TABLE users ADD COLUMN discord_user_id TEXT`,
 	}
 	for _, m := range optionalMigrations {
 		s.db.Exec(m) // Ignore errors - column may already exist
@@ -101,10 +105,10 @@ func (s *SQLiteStore) Close() error {
 func (s *SQLiteStore) GetUser(ctx context.Context, steamID string) (*User, error) {
 	var user User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at
+		`SELECT steam_id, name, avatar_url, COALESCE(discord_username, ''), COALESCE(discord_user_id, ''), captain_priority, created_at, updated_at
 		 FROM users WHERE steam_id = ?`, steamID).Scan(
 		&user.SteamID, &user.Name, &user.AvatarURL,
-		&user.CaptainPriority, &user.CreatedAt, &user.UpdatedAt,
+		&user.DiscordUsername, &user.DiscordUserID, &user.CaptainPriority, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -146,9 +150,29 @@ func (s *SQLiteStore) UpdateUserDisplayName(ctx context.Context, steamID, displa
 	return nil
 }
 
+func (s *SQLiteStore) UpdateUserProfile(ctx context.Context, steamID, displayName, discordUsername, discordUserID string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE users
+		 SET name = ?, discord_username = ?, discord_user_id = ?, updated_at = ?
+		 WHERE steam_id = ?`,
+		displayName, discordUsername, discordUserID, time.Now(), steamID,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
 func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at
+		`SELECT steam_id, name, avatar_url, COALESCE(discord_username, ''), COALESCE(discord_user_id, ''), captain_priority, created_at, updated_at
 		 FROM users ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -158,7 +182,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.SteamID, &u.Name, &u.AvatarURL, &u.CaptainPriority, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.SteamID, &u.Name, &u.AvatarURL, &u.DiscordUsername, &u.DiscordUserID, &u.CaptainPriority, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, u)

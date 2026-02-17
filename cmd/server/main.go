@@ -17,6 +17,7 @@ import (
 	"github.com/edvart/dota-inhouse/internal/auth"
 	"github.com/edvart/dota-inhouse/internal/bot"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/discord"
 	"github.com/edvart/dota-inhouse/internal/dotaapi"
 	"github.com/edvart/dota-inhouse/internal/matchrecorder"
 	"github.com/edvart/dota-inhouse/internal/push"
@@ -63,6 +64,11 @@ func main() {
 	vapidPublicKey := getEnv("VAPID_PUBLIC_KEY", "")
 	vapidPrivateKey := getEnv("VAPID_PRIVATE_KEY", "")
 	vapidSubject := getEnv("VAPID_SUBJECT", "mailto:noreply@example.com")
+
+	// Discord notifications
+	discordEnabled := getEnv("DISCORD_ENABLED", "") == "true"
+	discordBotToken := getEnv("DISCORD_BOT_TOKEN", "")
+	discordChannelID := getEnv("DISCORD_CHANNEL_ID", "")
 
 	// Configurable max players
 	if maxPlayersStr := getEnv("MAX_PLAYERS", ""); maxPlayersStr != "" {
@@ -148,12 +154,22 @@ func main() {
 		log.Println("Run 'go run cmd/generate-vapid/main.go' to generate keys")
 	}
 
+	// Initialize Discord service (optional)
+	var discordService *discord.Service
+	if discordEnabled && discordBotToken != "" && discordChannelID != "" {
+		discordService = discord.NewService(discord.Config{
+			BotToken:  discordBotToken,
+			ChannelID: discordChannelID,
+		})
+	}
+
 	// Initialize web server
 	server := web.NewServer(coord, steamAuth, sessions, db, templates, staticFS, web.Config{
-		DevMode:       devMode,
-		AdminSteamIDs: adminSteamIDs,
-		PushService:   pushService,
-		LogPath:       logPath,
+		DevMode:        devMode,
+		AdminSteamIDs:  adminSteamIDs,
+		PushService:    pushService,
+		DiscordService: discordService,
+		LogPath:        logPath,
 	})
 
 	// Create context for graceful shutdown
@@ -186,6 +202,18 @@ func main() {
 		pushEvents := coord.Subscribe()
 		go pushNotifier.Run(ctx, pushEvents)
 		log.Println("Push notifier started")
+	}
+
+	// Start Discord notifier for match accept notifications
+	if discordEnabled {
+		if discordService != nil {
+			discordNotifier := discord.NewNotifier(discordService, db)
+			discordEvents := coord.Subscribe()
+			go discordNotifier.Run(ctx, discordEvents)
+			log.Println("Discord notifier started")
+		} else {
+			log.Println("Warning: DISCORD_ENABLED=true but DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID missing; Discord notifications disabled")
+		}
 	}
 
 	// Start session cleanup job (runs every hour)

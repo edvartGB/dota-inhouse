@@ -208,9 +208,11 @@ func (sa *SteamAuth) MeHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"steamId":   user.SteamID,
-		"name":      user.Name,
-		"avatarUrl": user.AvatarURL,
+		"steamId":         user.SteamID,
+		"name":            user.Name,
+		"avatarUrl":       user.AvatarURL,
+		"discordUsername": user.DiscordUsername,
+		"discordUserId":   user.DiscordUserID,
 	})
 }
 
