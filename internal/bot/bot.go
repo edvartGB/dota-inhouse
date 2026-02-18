@@ -52,10 +52,10 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, maxRetries int, ti
 		attempt++
 		log.Printf("[%s] Connection attempt %d", b.name, attempt)
 
-		firstEvent := b.attemptConnection(timeout)
-		if firstEvent != nil {
+		firstConnected := b.attemptConnection(timeout)
+		if firstConnected != nil {
 			log.Printf("[%s] Connection established, listening to events", b.name)
-			b.handleEvents(loginInfo, firstEvent)
+			b.handleEvents(loginInfo, firstConnected)
 			// If handleEvents returns, the connection was lost - reconnect
 			log.Printf("[%s] Connection lost, will reconnect...", b.name)
 			attempt = 0 // Reset attempt counter after successful connection
@@ -71,39 +71,47 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, maxRetries int, ti
 
 		b.mu.Lock()
 		b.client = steam.NewClient()
+		b.loggedIn = false
+		b.dota2Client = nil
 		b.mu.Unlock()
 	}
 }
 
-func (b *Bot) attemptConnection(timeout time.Duration) interface{} {
-	eventChan := make(chan interface{}, 1)
+func (b *Bot) attemptConnection(timeout time.Duration) *steam.ConnectedEvent {
+	go b.client.Connect()
 
-	go func() {
-		b.client.Connect()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
 		select {
-		case event := <-b.client.Events():
-			eventChan <- event
-		case <-time.After(timeout):
-			eventChan <- nil
-		}
-	}()
+		case <-timer.C:
+			log.Printf("[%s] Connection attempt timed out", b.name)
+			b.client.Disconnect()
+			return nil
 
-	select {
-	case event := <-eventChan:
-		if event != nil {
-			return event
+		case event, ok := <-b.client.Events():
+			if !ok {
+				log.Printf("[%s] Steam event stream closed during connect", b.name)
+				return nil
+			}
+
+			switch e := event.(type) {
+			case *steam.ConnectedEvent:
+				return e
+			case *steam.DisconnectedEvent:
+				log.Printf("[%s] Disconnected before connect completed", b.name)
+				return nil
+			default:
+				log.Printf("[%s] Ignoring pre-connect event %T while waiting for ConnectedEvent", b.name, event)
+			}
 		}
-		log.Printf("[%s] Connection timed out", b.name)
-		b.client.Disconnect()
-		return nil
-	case <-time.After(timeout + 2*time.Second):
-		log.Printf("[%s] Connection attempt timed out", b.name)
-		b.client.Disconnect()
-		return nil
 	}
 }
 
 func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}) {
+	const logonTimeout = 20 * time.Second
+
 	ctx, cancel := context.WithCancel(context.Background())
 	b.mu.Lock()
 	b.ctx = ctx
@@ -115,8 +123,42 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 
 	b.processEvent(firstEvent, loginInfo)
 
-	for event := range b.client.Events() {
-		b.processEvent(event, loginInfo)
+	logonTimer := time.NewTimer(logonTimeout)
+	defer logonTimer.Stop()
+	waitingForLogon := true
+
+	for {
+		select {
+		case <-logonTimer.C:
+			b.mu.Lock()
+			isLoggedIn := b.loggedIn
+			b.mu.Unlock()
+
+			if waitingForLogon && !isLoggedIn {
+				log.Printf("[%s] Logon timed out after %v, forcing reconnect", b.name, logonTimeout)
+				b.client.Disconnect()
+				return
+			}
+			waitingForLogon = false
+
+		case event, ok := <-b.client.Events():
+			if !ok {
+				return
+			}
+
+			b.processEvent(event, loginInfo)
+			if waitingForLogon {
+				if _, ok := event.(*steam.LoggedOnEvent); ok {
+					waitingForLogon = false
+					if !logonTimer.Stop() {
+						select {
+						case <-logonTimer.C:
+						default:
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
