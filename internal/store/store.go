@@ -71,7 +71,10 @@ type Store interface {
 	GetMatchPlayers(ctx context.Context, matchID string) ([]MatchPlayer, error)
 
 	ListMatches(ctx context.Context, limit int) ([]Match, error)
+	ListMatchesPage(ctx context.Context, limit, offset int) ([]Match, error)
 	ListMatchesWithPlayers(ctx context.Context, limit int) ([]MatchWithPlayers, error)
+	ListMatchesWithPlayersPage(ctx context.Context, limit, offset int) ([]MatchWithPlayers, error)
+	CountCompletedMatches(ctx context.Context) (int, error)
 	ListIncompleteMatchesWithPlayers(ctx context.Context, limit int) ([]MatchWithPlayers, error)
 
 	GetLeaderboard(ctx context.Context, startDate, endDate *time.Time) ([]LeaderboardEntry, error)

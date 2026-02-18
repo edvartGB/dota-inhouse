@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -219,16 +220,48 @@ type PageData struct {
 }
 
 type HistoryPageData struct {
-	User    interface{}
-	Matches []store.MatchWithPlayers
-	DevMode bool
-	IsAdmin bool
+	User         interface{}
+	Matches      []store.MatchWithPlayers
+	DevMode      bool
+	IsAdmin      bool
+	Page         int
+	TotalPages   int
+	TotalMatches int
+	HasPrev      bool
+	HasNext      bool
+	PrevPage     int
+	NextPage     int
 }
 
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	user, _ := s.sessions.GetUser(r.Context(), r)
 
-	matches, err := s.store.ListMatchesWithPlayers(r.Context(), 50)
+	const pageSize = 20
+	page := 1
+	if pageParam := r.URL.Query().Get("page"); pageParam != "" {
+		if parsedPage, err := strconv.Atoi(pageParam); err == nil && parsedPage > 0 {
+			page = parsedPage
+		}
+	}
+	offset := (page - 1) * pageSize
+
+	totalMatches, err := s.store.CountCompletedMatches(r.Context())
+	if err != nil {
+		log.Printf("Failed to count match history: %v", err)
+		http.Error(w, "Failed to load history", http.StatusInternalServerError)
+		return
+	}
+
+	totalPages := (totalMatches + pageSize - 1) / pageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+		offset = (page - 1) * pageSize
+	}
+
+	matches, err := s.store.ListMatchesWithPlayersPage(r.Context(), pageSize, offset)
 	if err != nil {
 		log.Printf("Failed to load match history: %v", err)
 		http.Error(w, "Failed to load history", http.StatusInternalServerError)
@@ -245,6 +278,13 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		Matches: matches,
 		DevMode: s.devMode,
 		IsAdmin: isAdmin,
+		Page:    page,
+		TotalPages: totalPages,
+		TotalMatches: totalMatches,
+		HasPrev: page > 1,
+		HasNext: page < totalPages,
+		PrevPage: page - 1,
+		NextPage: page + 1,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "history.html", data); err != nil {

@@ -33,6 +33,9 @@
     </div>
 
     {{if .Matches}}
+    <div class="history-header">
+        <p>Page {{.Page}} of {{.TotalPages}} ({{.TotalMatches}} matches)</p>
+    </div>
     <div class="match-history">
         {{range .Matches}}
         {{$winner := ""}}{{if .Winner}}{{$winner = deref .Winner}}{{end}}
@@ -107,6 +110,23 @@
         </div>
         {{end}}
     </div>
+    {{if gt .TotalPages 1}}
+    <div class="history-header">
+        <div>
+            {{if .HasPrev}}
+                <a href="/history?page={{.PrevPage}}" class="btn btn-secondary">Previous</a>
+            {{else}}
+                <span class="btn btn-secondary" style="opacity:0.5; pointer-events:none;">Previous</span>
+            {{end}}
+            <span style="margin: 0 0.5rem;">Page {{.Page}} of {{.TotalPages}}</span>
+            {{if .HasNext}}
+                <a href="/history?page={{.NextPage}}" class="btn btn-secondary">Next</a>
+            {{else}}
+                <span class="btn btn-secondary" style="opacity:0.5; pointer-events:none;">Next</span>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
     {{else}}
     <div class="no-matches">
         <p>No completed matches yet.</p>
