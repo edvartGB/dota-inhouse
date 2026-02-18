@@ -80,7 +80,7 @@ func NewState() *State {
 		Queue:         []Player{},
 		Matches:       make(map[string]*Match),
 		LobbySettings: DefaultLobbySettings(),
-		QueueOpen:     false, // closed by default on startup
+		QueueOpen:     true, // open by default on startup
 	}
 }
 
