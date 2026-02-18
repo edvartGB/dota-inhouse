@@ -20,12 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Running in standalone mode');
         requestNotificationPermission();
     }
-
-    // Initial page render can already contain an accept dialog (non-HTMX path).
-    const initialAcceptDialog = document.querySelector('#match-area[data-play-notification="true"], #accept-dialog');
-    if (initialAcceptDialog) {
-        triggerMatchFoundNotification('initial-render');
-    }
 });
 
 // Play notification sound when HTMX loads an element with data-play-notification

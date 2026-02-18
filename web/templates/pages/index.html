@@ -14,7 +14,7 @@
             <div id="match-area">
                 {{if .Match}}
                     {{if eq .Match.State 0}}
-                        <div id="accept-dialog" class="dialog-overlay" data-play-notification="true">
+                        <div id="accept-dialog" class="dialog-overlay">
                             <div class="dialog">
                                 <h3>Match Found!</h3>
                                 <div class="countdown" data-deadline="{{.Match.AcceptDeadline.Format "2006-01-02T15:04:05Z07:00"}}"></div>
