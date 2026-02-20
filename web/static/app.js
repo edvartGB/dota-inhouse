@@ -1,7 +1,3 @@
-let audioUnlocked = false;
-let unlockListenersAttached = false;
-let lastMatchFoundNotificationAt = 0;
-
 document.addEventListener('DOMContentLoaded', () => {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js')
@@ -27,8 +23,8 @@ document.body.addEventListener('htmx:load', function(event) {
     const target = event.detail && event.detail.elt;
     if (!target) return;
 
-    // Handle both exact element and nested swaps.
-    if (target.closest('[data-play-notification="true"]')) {
+    // Only trigger when the marked match-found container itself is swapped in.
+    if (target.matches('[data-play-notification="true"]')) {
         triggerMatchFoundNotification('htmx-load');
     }
 });
@@ -57,47 +53,7 @@ function requestNotificationPermission() {
     }
 }
 
-function unlockAudio() {
-    if (audioUnlocked) return;
-
-    notificationAudio.play()
-        .then(() => {
-            notificationAudio.pause();
-            notificationAudio.currentTime = 0;
-            audioUnlocked = true;
-            console.log("Audio unlocked");
-            detachUnlockListeners();
-        })
-        .catch((e) => {
-            // Keep listeners active; first interaction can fail under autoplay rules.
-            console.warn("Audio unlock attempt failed:", e);
-        });
-
-    // Also request notification permission on interaction
-    requestNotificationPermission();
-}
-
-function attachUnlockListeners() {
-    if (unlockListenersAttached) return;
-    unlockListenersAttached = true;
-    document.addEventListener('click', unlockAudio);
-    document.addEventListener('keydown', unlockAudio);
-    document.addEventListener('touchstart', unlockAudio);
-}
-
-function detachUnlockListeners() {
-    if (!unlockListenersAttached) return;
-    unlockListenersAttached = false;
-    document.removeEventListener('click', unlockAudio);
-    document.removeEventListener('keydown', unlockAudio);
-    document.removeEventListener('touchstart', unlockAudio);
-}
-
-attachUnlockListeners();
-
 function playNotificationSound() {
-    if (!audioUnlocked) return;
-
     notificationAudio.currentTime = 0;
     console.log("Playing notification sound");
     notificationAudio.play().catch(e => {
@@ -106,11 +62,6 @@ function playNotificationSound() {
 }
 
 function triggerMatchFoundNotification(source) {
-    // Prevent duplicate triggers from near-simultaneous DOM/HTMX updates.
-    const now = Date.now();
-    if (now-lastMatchFoundNotificationAt < 1500) return;
-    lastMatchFoundNotificationAt = now;
-
     playNotificationSound();
     notifyMatchFound();
     console.log(`Match-found notification triggered (${source})`);
