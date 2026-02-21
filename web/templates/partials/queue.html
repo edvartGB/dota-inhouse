@@ -1,145 +1,291 @@
 {{define "queue"}}
 <div id="queue" class="queue-panel" hx-swap-oob="true">
-    <h3>
-        Queue ({{len .Queue}}/10)
-        <span class="queue-status {{if .QueueOpen}}open{{else}}closed{{end}}">
-            {{if .QueueOpen}}Open{{else}}Closed{{end}}
-        </span>
-    </h3>
-    <ul class="player-list">
-        {{range .Queue}}
-            <li class="player">
-                {{if .AvatarURL}}
-                    <img src="{{.AvatarURL}}" alt="" class="avatar">
-                {{else}}
-                    <span class="avatar avatar-slot" aria-hidden="true"></span>
-                {{end}}
-                <span>{{.Name}}</span>
-            </li>
-        {{end}}
-        {{$remaining := sub 10 (len .Queue)}}
-        {{range iterate $remaining}}
-            <li class="player empty">
-                <span class="avatar avatar-slot" aria-hidden="true"></span>
-                <span>Empty slot</span>
-            </li>
-        {{end}}
-    </ul>
+	<h3>
+		Queue ({{len .Queue}}/10)
+		<span class="queue-status {{if .QueueOpen}}open{{else}}closed{{end}}">
+			{{if .QueueOpen}}Open{{else}}Closed{{end}}
+		</span>
+	</h3>
+	<ul class="player-list">
+		{{range .Queue}}
+		<li class="player">
+			{{if .AvatarURL}}
+			<img src="{{.AvatarURL}}" alt="" class="avatar" />
+			{{else}}
+			<span class="avatar avatar-slot" aria-hidden="true"></span>
+			{{end}}
+			<span>{{.Name}}</span>
+		</li>
+		{{end}} {{$remaining := sub 10 (len .Queue)}} {{range iterate $remaining}}
+		<li class="player empty">
+			<span class="avatar avatar-slot" aria-hidden="true"></span>
+			<span>Empty slot</span>
+		</li>
+		{{end}}
+	</ul>
 
-    <div class="queue-actions">
-        {{if .InMatch}}
-            <button class="btn btn-secondary" disabled>In Match</button>
-        {{else}}
-            <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
-                hx-indicator="#join-btn" hx-disabled-elt="this"
-                {{if or .InQueue (not .QueueOpen)}}style="display:none;"{{end}}>
-                Join Queue
-            </button>
-            <button hx-post="/queue/leave" hx-swap="none" class="btn btn-danger" id="leave-btn"
-                hx-indicator="#leave-btn" hx-disabled-elt="this"
-                {{if not .InQueue}}style="display:none;"{{end}}>
-                Leave Queue
-            </button>
-            <button class="btn btn-secondary" disabled
-                {{if or .InQueue .QueueOpen}}style="display:none;"{{end}}>
-                Queue Closed
-            </button>
-        {{end}}
-    </div>
+	<div class="queue-actions">
+		{{if .InMatch}}
+		<button class="btn btn-secondary" disabled>In Match</button>
+		{{else}}
+		<button
+			hx-post="/queue/join"
+			hx-swap="none"
+			class="btn btn-primary"
+			id="join-btn"
+			hx-indicator="#join-btn"
+			hx-disabled-elt="this"
+			{{if
+			or
+			.InQueue
+			(not
+			.QueueOpen)}}style="display:none;"
+			{{end}}
+		>
+			Join Queue
+		</button>
+		<button
+			hx-post="/queue/leave"
+			hx-swap="none"
+			class="btn btn-danger"
+			id="leave-btn"
+			hx-indicator="#leave-btn"
+			hx-disabled-elt="this"
+			{{if
+			not
+			.InQueue}}style="display:none;"
+			{{end}}
+		>
+			Leave Queue
+		</button>
+		<button
+			class="btn btn-secondary"
+			disabled
+			{{if
+			or
+			.InQueue
+			.QueueOpen}}style="display:none;"
+			{{end}}
+		>
+			Queue Closed
+		</button>
+		{{end}}
+	</div>
 </div>
-{{end}}
+{{end}} {{define "active-matches-inner"}} {{if eq (len .Matches) 0}}
+<p class="no-matches">No active matches</p>
+{{else}}
+<ul class="match-list">
+	{{range .Matches}} {{$match := .}}
+	<li class="match-item {{.State | matchStateClass}}">
+		<div class="match-header-row">
+			<span class="match-status-badge {{.State | matchStateClass}}">
+				{{if eq .State 3}}
+				<span class="live-dot"></span>
+				{{end}} {{.State | matchStateName}}
+			</span>
+			{{/* Commented out until LiveDetails is implemented {{if .LiveDetails}}
+			<div class="match-live-meta">
+				<span class="match-timer"
+					>{{formatSeconds .LiveDetails.DurationSeconds}}</span
+				>
+				<span class="match-score">
+					<span class="score-radiant">{{.LiveDetails.RadiantScore}}</span>
+					<span class="score-separator">-</span>
+					<span class="score-dire">{{.LiveDetails.DireScore}}</span>
+				</span>
+			</div>
+			{{end}} */}}
+		</div>
 
-{{define "active-matches"}}
+		{{/* Commented out until LiveDetails is implemented {{if .LiveDetails}}
+		{{$totalKills := add .LiveDetails.RadiantScore .LiveDetails.DireScore}}
+		{{$radiantPct := pct .LiveDetails.RadiantScore $totalKills}}
+
+		<div class="match-kill-ratio">
+			<div class="kill-ratio-bar">
+				<div class="ratio-radiant" style="width: {{$radiantPct}}%"></div>
+			</div>
+			<div class="kill-ratio-labels">
+				<span class="ratio-label">{{.LiveDetails.RadiantScore}} Radiant</span>
+				<span class="ratio-label">Dire {{.LiveDetails.DireScore}}</span>
+			</div>
+		</div>
+
+		<div class="match-live-grid">
+			<div class="match-team-col team-radiant">
+				<div class="team-title">Radiant</div>
+				<ul class="match-player-list">
+					{{range .Radiant}}
+					<li class="match-player">
+						<span class="player-name">{{.Name}}</span>
+						{{$heroID := heroIDForPlayer . $match.LiveDetails}} {{$heroIcon :=
+						heroIconURL $heroID}} {{if $heroIcon}}
+						<img
+							class="hero-icon"
+							src="{{$heroIcon}}"
+							alt="{{heroLabel $heroID}}"
+							title="{{heroLabel $heroID}}"
+							loading="lazy"
+						/>
+						{{else}}
+						<span class="player-hero">{{heroLabel $heroID}}</span>
+						{{end}}
+					</li>
+					{{end}}
+				</ul>
+			</div>
+			<div class="match-team-col team-dire">
+				<div class="team-title">Dire</div>
+				<ul class="match-player-list">
+					{{range .Dire}}
+					<li class="match-player">
+						<span class="player-name">{{.Name}}</span>
+						{{$heroID := heroIDForPlayer . $match.LiveDetails}} {{$heroIcon :=
+						heroIconURL $heroID}} {{if $heroIcon}}
+						<img
+							class="hero-icon"
+							src="{{$heroIcon}}"
+							alt="{{heroLabel $heroID}}"
+							title="{{heroLabel $heroID}}"
+							loading="lazy"
+						/>
+						{{else}}
+						<span class="player-hero">{{heroLabel $heroID}}</span>
+						{{end}}
+					</li>
+					{{end}}
+				</ul>
+			</div>
+		</div>
+		{{else}} */}}
+		<div class="match-teams">
+			<span class="team-radiant"
+				>{{range $i, $p := .Radiant}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span
+			>
+			<span class="vs">vs</span>
+			<span class="team-dire"
+				>{{range $i, $p := .Dire}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span
+			>
+		</div>
+		{{/* {{end}} */}}
+	</li>
+	{{end}}
+</ul>
+{{end}} {{end}} {{define "active-matches"}}
 <div id="active-matches" class="matches-panel" hx-swap-oob="true">
-    <h3>Active Matches ({{len .Matches}})</h3>
-    {{if eq (len .Matches) 0}}
-        <p class="no-matches">No active matches</p>
-    {{else}}
-        <ul class="match-list">
-            {{range .Matches}}
-                <li class="match-item {{.State | matchStateClass}}">
-                    <span class="match-status-badge">{{.State | matchStateName}}</span>
-                    <div class="match-teams">
-                        <span class="team-radiant">{{range $i, $p := .Radiant}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
-                        <span class="vs">vs</span>
-                        <span class="team-dire">{{range $i, $p := .Dire}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
-                    </div>
-                </li>
-            {{end}}
-        </ul>
-    {{end}}
+	<h3>Active Matches ({{len .Matches}})</h3>
+	{{template "active-matches-inner" .}}
 </div>
-{{end}}
-
-{{define "active-matches-sse"}}
+{{end}} {{define "active-matches-sse"}}
 <div id="active-matches" class="matches-panel" hx-swap-oob="true">
-    <h3>Active Matches ({{len .Matches}})</h3>
-    {{if eq (len .Matches) 0}}
-        <p class="no-matches">No active matches</p>
-    {{else}}
-        <ul class="match-list">
-            {{range .Matches}}
-                <li class="match-item {{.State | matchStateClass}}">
-                    <span class="match-status-badge">{{.State | matchStateName}}</span>
-                    <div class="match-teams">
-                        <span class="team-radiant">{{range $i, $p := .Radiant}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
-                        <span class="vs">vs</span>
-                        <span class="team-dire">{{range $i, $p := .Dire}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
-                    </div>
-                </li>
-            {{end}}
-        </ul>
-    {{end}}
+	<h3>Active Matches ({{len .Matches}})</h3>
+	{{template "active-matches-inner" .}}
 </div>
-{{end}}
+{{end}} {{define "active-matches-simple"}}
+<div id="active-matches" class="matches-panel" hx-swap-oob="true">
+	<h3>Active Matches ({{len .Matches}})</h3>
+	{{if eq (len .Matches) 0}}
+	<p class="no-matches">No active matches</p>
+	{{else}}
+	<ul class="match-list-simple">
+		{{range .Matches}}
+		<li class="match-item-simple {{.State | matchStateClass}}">
+			<div class="match-header-simple">
+				<span class="match-badge-simple {{.State | matchStateClass}}">
+					{{if eq .State 3}}
+					<span class="live-dot-simple"></span>
+					{{end}} {{.State | matchStateName}}
+				</span>
+			</div>
 
-{{define "queue-sse"}}
+			<div class="match-teams-simple">
+				<span class="team-radiant-simple"
+					>{{range $i, $p := .Radiant}}{{if $i}},
+					{{end}}{{$p.Name}}{{end}}</span
+				>
+				<span class="vs-simple">vs</span>
+				<span class="team-dire-simple"
+					>{{range $i, $p := .Dire}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span
+				>
+			</div>
+		</li>
+		{{end}}
+	</ul>
+	{{end}}
+</div>
+{{end}} {{define "queue-sse"}}
 <div id="queue" class="queue-panel" hx-swap-oob="true" data-max-players="10">
-    <h3>
-        Queue ({{len .Queue}}/10)
-        <span class="queue-status {{if .QueueOpen}}open{{else}}closed{{end}}">
-            {{if .QueueOpen}}Open{{else}}Closed{{end}}
-        </span>
-    </h3>
-    <ul class="player-list">
-        {{range .Queue}}
-            <li class="player">
-                {{if .AvatarURL}}
-                    <img src="{{.AvatarURL}}" alt="" class="avatar">
-                {{else}}
-                    <span class="avatar avatar-slot" aria-hidden="true"></span>
-                {{end}}
-                <span>{{.Name}}</span>
-            </li>
-        {{end}}
-        {{$remaining := sub 10 (len .Queue)}}
-        {{range iterate $remaining}}
-            <li class="player empty">
-                <span class="avatar avatar-slot" aria-hidden="true"></span>
-                <span>Empty slot</span>
-            </li>
-        {{end}}
-    </ul>
+	<h3>
+		Queue ({{len .Queue}}/10)
+		<span class="queue-status {{if .QueueOpen}}open{{else}}closed{{end}}">
+			{{if .QueueOpen}}Open{{else}}Closed{{end}}
+		</span>
+	</h3>
+	<ul class="player-list">
+		{{range .Queue}}
+		<li class="player">
+			{{if .AvatarURL}}
+			<img src="{{.AvatarURL}}" alt="" class="avatar" />
+			{{else}}
+			<span class="avatar avatar-slot" aria-hidden="true"></span>
+			{{end}}
+			<span>{{.Name}}</span>
+		</li>
+		{{end}} {{$remaining := sub 10 (len .Queue)}} {{range iterate $remaining}}
+		<li class="player empty">
+			<span class="avatar avatar-slot" aria-hidden="true"></span>
+			<span>Empty slot</span>
+		</li>
+		{{end}}
+	</ul>
 
-    <div class="queue-actions">
-        {{if .InMatch}}
-            <button class="btn btn-secondary" disabled>In Match</button>
-        {{else}}
-            <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
-                hx-indicator="#join-btn" hx-disabled-elt="this"
-                {{if or .InQueue (not .QueueOpen)}}style="display:none;"{{end}}>
-                Join Queue
-            </button>
-            <button hx-post="/queue/leave" hx-swap="none" class="btn btn-danger" id="leave-btn"
-                hx-indicator="#leave-btn" hx-disabled-elt="this"
-                {{if not .InQueue}}style="display:none;"{{end}}>
-                Leave Queue
-            </button>
-            <button class="btn btn-secondary" disabled
-                {{if or .InQueue .QueueOpen}}style="display:none;"{{end}}>
-                Queue Closed
-            </button>
-        {{end}}
-    </div>
+	<div class="queue-actions">
+		{{if .InMatch}}
+		<button class="btn btn-secondary" disabled>In Match</button>
+		{{else}}
+		<button
+			hx-post="/queue/join"
+			hx-swap="none"
+			class="btn btn-primary"
+			id="join-btn"
+			hx-indicator="#join-btn"
+			hx-disabled-elt="this"
+			{{if
+			or
+			.InQueue
+			(not
+			.QueueOpen)}}style="display:none;"
+			{{end}}
+		>
+			Join Queue
+		</button>
+		<button
+			hx-post="/queue/leave"
+			hx-swap="none"
+			class="btn btn-danger"
+			id="leave-btn"
+			hx-indicator="#leave-btn"
+			hx-disabled-elt="this"
+			{{if
+			not
+			.InQueue}}style="display:none;"
+			{{end}}
+		>
+			Leave Queue
+		</button>
+		<button
+			class="btn btn-secondary"
+			disabled
+			{{if
+			or
+			.InQueue
+			.QueueOpen}}style="display:none;"
+			{{end}}
+		>
+			Queue Closed
+		</button>
+		{{end}}
+	</div>
 </div>
 {{end}}
