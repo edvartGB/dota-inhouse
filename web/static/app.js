@@ -63,34 +63,7 @@ function playNotificationSound() {
 
 function triggerMatchFoundNotification(source) {
     playNotificationSound();
-    notifyMatchFound();
     console.log(`Match-found notification triggered (${source})`);
-}
-
-function notifyMatchFound() {
-    console.log('notifyMatchFound called, permission:', Notification.permission);
-
-    if (!('serviceWorker' in navigator)) {
-        console.warn('Service Worker not supported');
-        return;
-    }
-
-    if (Notification.permission !== 'granted') {
-        console.warn('Notification permission not granted. Current:', Notification.permission);
-        requestNotificationPermission();
-        return;
-    }
-
-    navigator.serviceWorker.ready.then(reg => {
-        if (reg.active) {
-            console.log('Sending MATCH_FOUND message to service worker');
-            reg.active.postMessage({ type: 'MATCH_FOUND' });
-        } else {
-            console.warn('Service worker not active');
-        }
-    }).catch(err => {
-        console.error('Service worker error:', err);
-    });
 }
 
 

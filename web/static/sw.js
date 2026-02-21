@@ -4,8 +4,6 @@ const STATIC_CACHE = 'dota-inhouse-static-v1';
 // Files to cache for offline support
 const STATIC_FILES = [
     '/',
-    '/static/styles.css',
-    '/static/app.js',
     '/static/favicon.ico',
     '/static/faceit_trumpet.mp3',
     '/manifest.json'
@@ -46,6 +44,15 @@ self.addEventListener('fetch', (event) => {
 
     // Network first for API calls, cache first for static assets
     if (event.request.url.includes('/static/')) {
+        const url = new URL(event.request.url);
+        const isJsOrCss = url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
+
+        // Always fetch fresh JS/CSS; do not serve from service worker cache.
+        if (isJsOrCss) {
+            event.respondWith(fetch(event.request, { cache: 'no-store' }));
+            return;
+        }
+
         // Cache first for static files
         event.respondWith(
             caches.match(event.request)
@@ -64,29 +71,6 @@ self.addEventListener('fetch', (event) => {
                 })
                 .catch(() => caches.match(event.request))
         );
-    }
-});
-
-// Handle messages from the app
-self.addEventListener('message', (event) => {
-    console.log('Service worker received message:', event.data);
-
-    if (event.data?.type === 'MATCH_FOUND') {
-        console.log('Attempting to show notification...');
-
-        self.registration.showNotification('DNDL Match Found! 🎮', {
-            body: 'Click to accept your match.',
-            tag: 'match-found',
-            icon: '/static/favicon.ico',
-            badge: '/static/favicon.ico',
-            requireInteraction: true,
-            vibrate: [200, 100, 200],
-            silent: false  // Ensure notification plays system sound
-        }).then(() => {
-            console.log('Notification shown successfully');
-        }).catch(err => {
-            console.error('Failed to show notification:', err);
-        });
     }
 });
 

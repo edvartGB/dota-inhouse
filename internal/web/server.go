@@ -77,7 +77,16 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
 
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
+	r.Handle("/static/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Disable browser caching for JS/CSS during active development.
+		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+		}
+		staticHandler.ServeHTTP(w, r)
+	}))
 
 	r.Get("/sw.js", func(w http.ResponseWriter, r *http.Request) {
 		data, err := fs.ReadFile(staticFS, "sw.js")
@@ -87,6 +96,9 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		}
 
 		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		w.Write(data)
 	})
 
