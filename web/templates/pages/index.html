@@ -20,10 +20,21 @@
                                 <div class="countdown" data-deadline="{{.Match.AcceptDeadline.Format "2006-01-02T15:04:05Z07:00"}}"></div>
 
                                 <div id="accept-status" class="accept-status">
-                                    <p>{{len .Match.AcceptedPlayers}}/10 players accepted</p>
+                                    <p>{{len .Match.AcceptedPlayers}}/{{len .Match.Players}} players accepted</p>
                                     <div class="progress-bar">
-                                        <div class="progress" style="width: {{percent (len .Match.AcceptedPlayers) 10}}%"></div>
+                                        <div class="progress" style="width: {{percent (len .Match.AcceptedPlayers) (len .Match.Players)}}%"></div>
                                     </div>
+                                    {{if .Match.Players}}
+                                    <ul class="accept-player-list">
+                                        {{range .Match.Players}}
+                                        <li class="accept-player {{if index $.Match.AcceptedPlayers .SteamID}}accepted{{end}}">
+                                            {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small">{{end}}
+                                            <span>{{.Name}}</span>
+                                            {{if index $.Match.AcceptedPlayers .SteamID}}<span class="accept-check">&#10003;</span>{{end}}
+                                        </li>
+                                        {{end}}
+                                    </ul>
+                                    {{end}}
                                 </div>
 
                                 <button hx-post="/match/{{.Match.ID}}/accept"
