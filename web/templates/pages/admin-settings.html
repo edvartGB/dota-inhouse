@@ -10,7 +10,7 @@
         .admin-section { background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
         .settings-form { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
         .settings-form label { display:block; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.25rem; }
-        .settings-form select { padding:0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.9rem; }
+        .settings-form select, .settings-form input { padding:0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.9rem; }
         .queue-controls { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; }
         .queue-status { font-size:0.85rem; color:var(--text-secondary); }
     </style>
@@ -40,6 +40,10 @@
                             <option value="{{$key}}" {{if eq $key $.LobbySettings.GameMode}}selected{{end}}>{{$name}}</option>
                             {{end}}
                         </select>
+                    </div>
+                    <div>
+                        <label for="league_id">League ID</label>
+                        <input type="number" min="0" step="1" name="league_id" id="league_id" value="{{.LobbySettings.LeagueID}}">
                     </div>
                     <button type="submit" class="btn btn-primary btn-small">Save Settings</button>
                 </form>

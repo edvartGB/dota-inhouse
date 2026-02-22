@@ -52,11 +52,13 @@ type Match struct {
 
 type LobbySettings struct {
 	GameMode string `json:"gameMode"` // "cm", "ap", "cd", "rd", "ar"
+	LeagueID uint32 `json:"leagueId"` // 0 means no league
 }
 
 func DefaultLobbySettings() LobbySettings {
 	return LobbySettings{
 		GameMode: "cd",
+		LeagueID: 0,
 	}
 }
 

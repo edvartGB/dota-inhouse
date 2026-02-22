@@ -69,6 +69,7 @@ type RequestBotLobby struct {
 	Radiant  []Player
 	Dire     []Player
 	GameMode string // "cm", "ap", "cd", "rd", "ar"
+	LeagueID uint32 // 0 means no league
 	Deadline time.Time
 }
 

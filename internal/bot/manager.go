@@ -117,7 +117,7 @@ func (m *Manager) handleLobbyRequest(ctx context.Context, req coordinator.Reques
 		bot := m.getAvailableBot()
 		if bot != nil {
 			log.Printf("Assigning bot %s to match %s", bot.name, req.MatchID)
-			if bot.CreateLobby(matchCtx, req.MatchID, req.Players, req.Radiant, req.Dire, req.GameMode, m.commands) {
+			if bot.CreateLobby(matchCtx, req.MatchID, req.Players, req.Radiant, req.Dire, req.GameMode, req.LeagueID, m.commands) {
 				return
 			}
 			log.Printf("Bot %s failed to create lobby, trying another...", bot.name)

@@ -48,6 +48,15 @@ func (c *Coordinator) RestoreQueue(players []Player) {
 	c.state.Queue = players
 }
 
+// SetInitialLobbySettings sets lobby settings before Run.
+func (c *Coordinator) SetInitialLobbySettings(settings LobbySettings) error {
+	if _, ok := ValidGameModes[settings.GameMode]; !ok {
+		return errors.New("invalid game mode")
+	}
+	c.state.LobbySettings = settings
+	return nil
+}
+
 func (c *Coordinator) saveQueue() {
 	if c.persistQueue != nil {
 		c.persistQueue(c.state.Queue)
@@ -467,6 +476,7 @@ func (c *Coordinator) completeDraft(match *Match) {
 		Radiant:  match.Radiant,
 		Dire:     match.Dire,
 		GameMode: c.state.LobbySettings.GameMode,
+		LeagueID: c.state.LobbySettings.LeagueID,
 		Deadline: match.LobbyDeadline,
 	})
 }
@@ -804,7 +814,7 @@ func (c *Coordinator) handleAdminSetLobbySettings(cmd AdminSetLobbySettings) err
 	}
 
 	c.state.LobbySettings = cmd.Settings
-	log.Printf("Admin updated lobby settings: game mode = %s", cmd.Settings.GameMode)
+	log.Printf("Admin updated lobby settings: game mode = %s, league_id = %d", cmd.Settings.GameMode, cmd.Settings.LeagueID)
 
 	return nil
 }

@@ -83,6 +83,18 @@ func main() {
 		}
 	}
 
+	// Optional league ID for practice lobbies.
+	leagueID := uint32(0)
+	if leagueIDStr := getEnv("LEAGUE_ID", ""); leagueIDStr != "" {
+		parsedLeagueID, err := strconv.ParseUint(leagueIDStr, 10, 32)
+		if err != nil {
+			log.Printf("Warning: invalid LEAGUE_ID %q (must be integer >= 0)", leagueIDStr)
+		} else {
+			leagueID = uint32(parsedLeagueID)
+			log.Printf("League ID set to %d", leagueID)
+		}
+	}
+
 	// Find project root (where web/ directory is)
 	projectRoot := findProjectRoot()
 	if projectRoot == "" {
@@ -107,6 +119,11 @@ func main() {
 
 	// Initialize coordinator
 	coord := coordinator.New()
+	initialLobbySettings := coordinator.DefaultLobbySettings()
+	initialLobbySettings.LeagueID = leagueID
+	if err := coord.SetInitialLobbySettings(initialLobbySettings); err != nil {
+		log.Fatalf("Failed to configure initial lobby settings: %v", err)
+	}
 
 	// Restore queue from disk and set up persistence
 	queuePath := filepath.Join(filepath.Dir(dbPath), "queue.json")

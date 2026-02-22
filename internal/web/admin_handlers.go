@@ -153,7 +153,6 @@ func sortAdminCaptainUsers(users []store.User, sortBy, sortDir string) {
 	})
 }
 
-
 func (s *Server) handleAdminSettingsPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	_, _, lobbySettings, queueOpen := s.coordinator.GetState()
@@ -411,10 +410,22 @@ func (s *Server) handleAdminSetLobbySettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	leagueID := uint32(0)
+	leagueIDStr := strings.TrimSpace(r.FormValue("league_id"))
+	if leagueIDStr != "" {
+		parsedLeagueID, err := strconv.ParseUint(leagueIDStr, 10, 32)
+		if err != nil {
+			http.Error(w, "league_id must be a positive integer", http.StatusBadRequest)
+			return
+		}
+		leagueID = uint32(parsedLeagueID)
+	}
+
 	resp := make(chan error, 1)
 	s.coordinator.Send(coordinator.AdminSetLobbySettings{
 		Settings: coordinator.LobbySettings{
 			GameMode: gameMode,
+			LeagueID: leagueID,
 		},
 		Response: resp,
 	})

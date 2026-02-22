@@ -211,7 +211,7 @@ func gameModeFromString(mode string) protocol.DOTA_GameMode {
 	}
 }
 
-func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordinator.Player, radiant []coordinator.Player, dire []coordinator.Player, gameMode string, commands chan<- coordinator.Command) bool {
+func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordinator.Player, radiant []coordinator.Player, dire []coordinator.Player, gameMode string, leagueID uint32, commands chan<- coordinator.Command) bool {
 	b.mu.Lock()
 	if !b.loggedIn {
 		b.mu.Unlock()
@@ -246,15 +246,19 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 
 	lobbyName := fmt.Sprintf("Inhouse Match %s", matchID[:8])
 	dotaGameMode := gameModeFromString(gameMode)
-	log.Printf("[%s] Creating lobby with game mode: %s (%v)", b.name, gameMode, dotaGameMode)
-	b.dota2Client.LeaveCreateLobby(b.ctx, &protocol.CMsgPracticeLobbySetDetails{
+	log.Printf("[%s] Creating lobby with game mode: %s (%v), league_id: %d", b.name, gameMode, dotaGameMode, leagueID)
+	lobbyDetails := &protocol.CMsgPracticeLobbySetDetails{
 		AllowCheats:     proto.Bool(false),
 		AllowSpectating: proto.Bool(true),
 		GameName:        proto.String(lobbyName),
 		GameMode:        proto.Uint32(uint32(dotaGameMode)),
 		Visibility:      protocol.DOTALobbyVisibility_DOTALobbyVisibility_Public.Enum(),
 		DotaTvDelay:     protocol.LobbyDotaTVDelay_LobbyDotaTV_10.Enum(),
-	}, true)
+	}
+	if leagueID > 0 {
+		lobbyDetails.Leagueid = proto.Uint32(leagueID)
+	}
+	b.dota2Client.LeaveCreateLobby(b.ctx, lobbyDetails, true)
 
 	log.Printf("[%s] Moving bot to unassigned pool", b.name)
 	b.dota2Client.JoinLobbyTeam(protocol.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 1)
