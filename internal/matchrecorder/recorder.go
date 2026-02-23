@@ -175,8 +175,9 @@ func (r *Recorder) fetchWithRetry(ctx context.Context, matchID uint64) (*dotaapi
 	delays := []time.Duration{0, 10 * time.Second, 30 * time.Second}
 	var lastErr error
 	for i, delay := range delays {
+		attempt := i + 1
 		if delay > 0 {
-			log.Printf("Match recorder: retrying Dota API fetch for match %d (attempt %d/%d) in %s", matchID, i+1, len(delays), delay)
+			log.Printf("Match recorder: retrying Dota API fetch for match %d (attempt %d/%d) in %s", matchID, attempt, len(delays), delay)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -187,6 +188,7 @@ func (r *Recorder) fetchWithRetry(ctx context.Context, matchID uint64) (*dotaapi
 		if err == nil {
 			return details, nil
 		}
+		log.Printf("Match recorder: Dota API fetch failed for match %d on attempt %d/%d: %v", matchID, attempt, len(delays), err)
 		lastErr = err
 	}
 	return nil, lastErr

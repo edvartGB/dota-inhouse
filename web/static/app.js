@@ -241,3 +241,30 @@ setInterval(function() {
         el.classList.toggle('countdown-urgent', remaining <= 10);
     });
 }, 1000);
+
+// Keep accept button latched after first successful click to avoid duplicate taps
+// while waiting for SSE UI update from server.
+document.body.addEventListener('htmx:beforeRequest', function(event) {
+    const elt = event.detail && event.detail.elt;
+    if (!elt || elt.id !== 'accept-btn') return;
+
+    elt.dataset.originalLabel = elt.textContent;
+    elt.textContent = 'Accepting...';
+    elt.disabled = true;
+});
+
+document.body.addEventListener('htmx:afterRequest', function(event) {
+    const elt = event.detail && event.detail.elt;
+    if (!elt || elt.id !== 'accept-btn') return;
+
+    if (event.detail && event.detail.successful) {
+        // Keep disabled until SSE swaps in the accepted button state.
+        elt.textContent = 'Accepting...';
+        elt.disabled = true;
+        return;
+    }
+
+    // Request failed: restore button so user can retry.
+    elt.textContent = elt.dataset.originalLabel || 'Accept Match';
+    elt.disabled = false;
+});

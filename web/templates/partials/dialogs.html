@@ -6,13 +6,9 @@
             <div class="countdown" data-deadline="{{.Deadline}}"></div>
             <p>A match has been found. Accept to join the draft.</p>
 
-            <div id="accept-status">
-                {{template "accept-status" .}}
-            </div>
+            {{template "accept-status" .}}
 
-            <div id="accept-button-container">
-                {{template "accept-button" .}}
-            </div>
+            {{template "accept-button" .}}
         </div>
     </div>
 </div>

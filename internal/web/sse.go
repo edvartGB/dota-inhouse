@@ -333,9 +333,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 			log.Printf("Failed to render queue after match completed: %v", err)
 		}
-		if err := h.templates.ExecuteTemplate(&buf, "active-matches-sse", struct{ Matches []*coordinator.Match }{Matches: []*coordinator.Match{}}); err != nil {
-			log.Printf("Failed to render active matches after completion: %v", err)
-		}
 
 	case coordinator.MatchCancelledByAdmin:
 		if !isUserInPlayers(userID, e.Players) {
@@ -370,9 +367,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after admin cancel: %v", err)
 			}
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "active-matches-sse", struct{ Matches []*coordinator.Match }{Matches: []*coordinator.Match{}}); err != nil {
-			log.Printf("Failed to render active matches after admin cancel: %v", err)
 		}
 
 	default:

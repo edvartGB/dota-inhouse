@@ -37,11 +37,21 @@
                                     {{end}}
                                 </div>
 
-                                <button hx-post="/match/{{.Match.ID}}/accept"
-                                        hx-swap="none"
-                                        class="btn btn-primary btn-large">
-                                    Accept Match
-                                </button>
+                                <div id="accept-button-container">
+                                    {{if index .Match.AcceptedPlayers .User.SteamID}}
+                                    <button class="btn btn-primary btn-large" disabled>
+                                        ✓ Accepted
+                                    </button>
+                                    {{else}}
+                                    <button hx-post="/match/{{.Match.ID}}/accept"
+                                            hx-swap="none"
+                                            class="btn btn-primary btn-large"
+                                            id="accept-btn"
+                                            hx-disabled-elt="this">
+                                        Accept Match
+                                    </button>
+                                    {{end}}
+                                </div>
                             </div>
                         </div>
                     {{else if eq .Match.State 1}}
@@ -94,6 +104,10 @@
             </div>
         </div>
         {{end}}
+
+        <div hx-ext="sse" sse-connect="/events">
+            <div sse-swap="message" style="display:none;"></div>
+        </div>
     {{else}}
         <div class="welcome">
             <h2>Welcome to Dota Inhouse</h2>

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -30,13 +32,13 @@ func NewClient(apiKey string) *Client {
 
 // MatchDetails contains the relevant match information from the API.
 type MatchDetails struct {
-	MatchID       uint64 `json:"match_id"`
-	RadiantWin    bool   `json:"radiant_win"`
-	Duration      int    `json:"duration"` // Duration in seconds
-	StartTime     int64  `json:"start_time"`
-	GameMode      int    `json:"game_mode"`
-	RadiantScore  int    `json:"radiant_score"`
-	DireScore     int    `json:"dire_score"`
+	MatchID      uint64 `json:"match_id"`
+	RadiantWin   bool   `json:"radiant_win"`
+	Duration     int    `json:"duration"` // Duration in seconds
+	StartTime    int64  `json:"start_time"`
+	GameMode     int    `json:"game_mode"`
+	RadiantScore int    `json:"radiant_score"`
+	DireScore    int    `json:"dire_score"`
 }
 
 // apiResponse wraps the API response.
@@ -64,7 +66,12 @@ func (c *Client) GetMatchDetails(ctx context.Context, matchID uint64) (*MatchDet
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		body := strings.TrimSpace(string(bodyBytes))
+		if body == "" {
+			return nil, fmt.Errorf("API returned status %d (%s)", resp.StatusCode, resp.Status)
+		}
+		return nil, fmt.Errorf("API returned status %d (%s): %q", resp.StatusCode, resp.Status, body)
 	}
 
 	var result apiResponse
