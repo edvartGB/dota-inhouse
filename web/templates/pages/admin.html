@@ -71,6 +71,18 @@
                 </div>
 
                 <div class="admin-card">
+                    <h3>Bot Status</h3>
+                    <div class="admin-meta">
+                        {{if gt .BotCount 0}}
+                            {{.BotOnlineCount}} / {{.BotCount}} bots logged in.
+                        {{else}}
+                            No bots configured.
+                        {{end}}
+                    </div>
+                    <a href="/admin/bots" class="btn btn-secondary admin-link">Open Bot Status</a>
+                </div>
+
+                <div class="admin-card">
                     <h3>Broken Matches</h3>
                     <div class="admin-meta">{{.BrokenCount}} unresolved matches in DB.</div>
                     <a href="/admin/broken-matches" class="btn btn-secondary admin-link">Open Broken Matches</a>

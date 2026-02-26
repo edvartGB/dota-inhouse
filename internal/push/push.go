@@ -17,6 +17,8 @@ type Service struct {
 	vapidSubject  string
 }
 
+const maxSubscriptionsPerUser = 3
+
 type Config struct {
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
@@ -51,6 +53,11 @@ func (s *Service) SendToUser(ctx context.Context, steamID string, payload Notifi
 	if len(subs) == 0 {
 		log.Printf("No push subscriptions found for user %s", steamID)
 		return nil
+	}
+
+	if len(subs) > maxSubscriptionsPerUser {
+		log.Printf("User %s has %d push subscriptions, sending to newest %d", steamID, len(subs), maxSubscriptionsPerUser)
+		subs = subs[:maxSubscriptionsPerUser]
 	}
 
 	payloadBytes, err := json.Marshal(payload)

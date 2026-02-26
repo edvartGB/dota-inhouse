@@ -1,0 +1,165 @@
+{{define "admin-bots.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Bot Status - Dota Inhouse</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .admin-section {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .summary-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0.75rem;
+            margin: 1rem 0 1.25rem;
+        }
+        .meta {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .summary-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem 0.9rem;
+        }
+        .summary-label {
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            margin-bottom: 0.25rem;
+        }
+        .summary-value {
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .admin-table th,
+        .admin-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .admin-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+        }
+        .status-chip {
+            display: inline-block;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 0.2rem 0.6rem;
+            letter-spacing: 0.03em;
+        }
+        .status-available {
+            color: #4cc38a;
+            background: rgba(76, 195, 138, 0.2);
+        }
+        .status-busy {
+            color: #f0ad4e;
+            background: rgba(240, 173, 78, 0.2);
+        }
+        .status-disconnected {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.2);
+        }
+        .empty-state {
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 0.8rem 0.2rem 0;
+        }
+        @media (max-width: 760px) {
+            .admin-table {
+                font-size: 0.9rem;
+            }
+            .admin-table th,
+            .admin-table td {
+                padding: 0.6rem 0.45rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Admin Bot Status</h1>
+        <nav>
+            <a href="/" class="nav-link">Queue</a>
+            <a href="/history" class="nav-link">History</a>
+            <a href="/leaderboard" class="nav-link">Leaderboard</a>
+            <a href="/profile" class="nav-link">Profile</a>
+            <a href="/admin" class="nav-link nav-link-active">Admin</a>
+            {{if .User}}
+                <span class="user-info">{{.User.Name}}</span>
+                <a href="/auth/logout" class="btn btn-secondary">Logout</a>
+            {{end}}
+        </nav>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="admin-section">
+                <h3>Steam Bot Overview</h3>
+                <p class="meta">Snapshot generated at {{.GeneratedAt}}</p>
+
+                <div class="summary-row">
+                    <div class="summary-card">
+                        <div class="summary-label">Total Bots</div>
+                        <div class="summary-value">{{.TotalBots}}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">Available</div>
+                        <div class="summary-value">{{.AvailableCount}}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">Busy</div>
+                        <div class="summary-value">{{.BusyCount}}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">Disconnected</div>
+                        <div class="summary-value">{{.DisconnectedCount}}</div>
+                    </div>
+                </div>
+
+                {{if .BotStatuses}}
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Bot</th>
+                            <th>State</th>
+                            <th>Logged In</th>
+                            <th>Busy</th>
+                            <th>Dota Client</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .BotStatuses}}
+                        <tr>
+                            <td><code>{{.Name}}</code></td>
+                            <td><span class="status-chip status-{{.State}}">{{.State}}</span></td>
+                            <td>{{if .LoggedIn}}Yes{{else}}No{{end}}</td>
+                            <td>{{if .Busy}}Yes{{else}}No{{end}}</td>
+                            <td>{{if .HasDotaClient}}Ready{{else}}No Client{{end}}</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                {{else}}
+                <p class="empty-state">No bots configured. Set `BOT*_USERNAME` and `BOT*_PASSWORD` in the environment to enable host bots.</p>
+                {{end}}
+            </div>
+        </div>
+    </main>
+</body>
+</html>
+{{end}}

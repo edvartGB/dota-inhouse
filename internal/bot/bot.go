@@ -30,6 +30,14 @@ type Bot struct {
 	mu           sync.Mutex
 }
 
+type Status struct {
+	Name          string
+	LoggedIn      bool
+	Busy          bool
+	HasDotaClient bool
+	State         string
+}
+
 func NewBot(username, password string) *Bot {
 	bot := &Bot{
 		name:   username,
@@ -41,12 +49,12 @@ func NewBot(username, password string) *Bot {
 		Password: password,
 	}
 
-	go bot.connectWithRetry(loginInfo, 5, 10*time.Second)
+	go bot.connectWithRetry(loginInfo, 10*time.Second)
 
 	return bot
 }
 
-func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, maxRetries int, timeout time.Duration) {
+func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, timeout time.Duration) {
 	attempt := 0
 	for {
 		attempt++
@@ -121,7 +129,9 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 
 	log.Printf("[%s] Listening to steam client events", b.name)
 
-	b.processEvent(firstEvent, loginInfo)
+	if b.processEvent(firstEvent, loginInfo) {
+		return
+	}
 
 	logonTimer := time.NewTimer(logonTimeout)
 	defer logonTimer.Stop()
@@ -146,7 +156,9 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 				return
 			}
 
-			b.processEvent(event, loginInfo)
+			if b.processEvent(event, loginInfo) {
+				return
+			}
 			if waitingForLogon {
 				if _, ok := event.(*steam.LoggedOnEvent); ok {
 					waitingForLogon = false
@@ -162,30 +174,65 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 	}
 }
 
-func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) {
+func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) bool {
 	switch event.(type) {
 	case *steam.ConnectedEvent:
 		log.Printf("[%s] Connected, logging on…", b.name)
 		b.client.Auth.LogOn(loginInfo)
+		return false
 
 	case *steam.LoggedOnEvent:
 		b.mu.Lock()
 		b.loggedIn = true
 		b.mu.Unlock()
 		log.Printf("[%s] Logged on successfully!", b.name)
+		return false
 
 	case *steam.DisconnectedEvent:
 		log.Printf("[%s] Disconnected.", b.name)
 		b.mu.Lock()
 		b.loggedIn = false
+		dotaClient := b.dota2Client
+		b.dota2Client = nil
 		b.mu.Unlock()
+		if dotaClient != nil {
+			dotaClient.SetPlaying(false)
+			dotaClient.Close()
+		}
+		// Exit the event loop so connectWithRetry can establish a fresh connection.
+		return true
 	}
+
+	return false
 }
 
 func (b *Bot) IsAvailable() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.loggedIn && !b.busy
+}
+
+func (b *Bot) Status() Status {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	status := Status{
+		Name:          b.name,
+		LoggedIn:      b.loggedIn,
+		Busy:          b.busy,
+		HasDotaClient: b.dota2Client != nil,
+	}
+
+	switch {
+	case !status.LoggedIn:
+		status.State = "disconnected"
+	case status.Busy:
+		status.State = "busy"
+	default:
+		status.State = "available"
+	}
+
+	return status
 }
 
 const (

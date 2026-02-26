@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/auth"
+	"github.com/edvart/dota-inhouse/internal/bot"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 	discordsvc "github.com/edvart/dota-inhouse/internal/discord"
 	"github.com/edvart/dota-inhouse/internal/push"
@@ -31,15 +32,17 @@ type Server struct {
 	adminConfig *auth.AdminConfig
 	pushService *push.Service
 	discordSvc  *discordsvc.Service
+	botManager  *bot.Manager
 	logPath     string
 }
 
 type Config struct {
-	DevMode       bool
-	AdminSteamIDs string // Comma-separated list of admin Steam IDs
-	PushService   *push.Service
+	DevMode        bool
+	AdminSteamIDs  string // Comma-separated list of admin Steam IDs
+	PushService    *push.Service
 	DiscordService *discordsvc.Service
-	LogPath       string
+	BotManager     *bot.Manager
+	LogPath        string
 }
 
 func NewServer(
@@ -63,6 +66,7 @@ func NewServer(
 		adminConfig: auth.NewAdminConfig(cfg.AdminSteamIDs),
 		pushService: cfg.PushService,
 		discordSvc:  cfg.DiscordService,
+		botManager:  cfg.BotManager,
 		logPath:     cfg.LogPath,
 	}
 
@@ -162,6 +166,7 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Get("/admin/captains", s.handleAdminCaptainsPage)
 		r.Get("/admin/settings", s.handleAdminSettingsPage)
 		r.Get("/admin/discord", s.handleAdminDiscordPage)
+		r.Get("/admin/bots", s.handleAdminBotsPage)
 		r.Get("/admin/broken-matches", s.handleAdminBrokenMatchesPage)
 		r.Get("/admin/state", s.handleAdminState)
 		r.Post("/admin/match/{matchID}/cancel", s.handleAdminCancelMatch)

@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -145,6 +146,25 @@ func (m *Manager) getAvailableBot() *Bot {
 		}
 	}
 	return nil
+}
+
+// Statuses returns a snapshot of all configured bots.
+func (m *Manager) Statuses() []Status {
+	m.mu.Lock()
+	bots := make([]*Bot, len(m.bots))
+	copy(bots, m.bots)
+	m.mu.Unlock()
+
+	statuses := make([]Status, 0, len(bots))
+	for _, bot := range bots {
+		statuses = append(statuses, bot.Status())
+	}
+
+	sort.Slice(statuses, func(i, j int) bool {
+		return statuses[i].Name < statuses[j].Name
+	})
+
+	return statuses
 }
 
 // Shutdown disconnects all bots.

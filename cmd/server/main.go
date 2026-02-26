@@ -183,12 +183,46 @@ func main() {
 		})
 	}
 
+	// Initialize bot manager if credentials are configured
+	var botManager *bot.Manager
+	var botEvents <-chan coordinator.Event
+	botCreds := []bot.BotCredentials{
+		{Username: bot1User, Password: bot1Pass},
+		{Username: bot2User, Password: bot2Pass},
+		{Username: bot3User, Password: bot3Pass},
+		{Username: bot4User, Password: bot4Pass},
+	}
+
+	var validCreds []bot.BotCredentials
+	for _, cred := range botCreds {
+		if cred.Username != "" && cred.Password != "" {
+			validCreds = append(validCreds, cred)
+		}
+	}
+
+	if len(validCreds) > 0 {
+		botCommands := make(chan coordinator.Command, 100)
+		go func() {
+			for cmd := range botCommands {
+				coord.Send(cmd)
+			}
+		}()
+
+		botManager = bot.NewManager(bot.Config{
+			Bots: validCreds,
+		}, botCommands)
+		botEvents = coord.Subscribe()
+	} else {
+		log.Println("No bot credentials configured. Lobby creation will be skipped.")
+	}
+
 	// Initialize web server
 	server := web.NewServer(coord, steamAuth, sessions, db, templates, staticFS, web.Config{
 		DevMode:        devMode,
 		AdminSteamIDs:  adminSteamIDs,
 		PushService:    pushService,
 		DiscordService: discordService,
+		BotManager:     botManager,
 		LogPath:        logPath,
 	})
 
@@ -201,6 +235,11 @@ func main() {
 
 	// Start SSE hub
 	server.StartSSE(coord.Events())
+
+	// Start bot manager
+	if botManager != nil {
+		go botManager.Run(ctx, botEvents)
+	}
 
 	// Initialize Dota API client (uses same Steam API key)
 	var dotaAPIClient *dotaapi.Client
@@ -253,39 +292,6 @@ func main() {
 			}
 		}
 	}()
-
-	// Initialize and start bot manager if credentials are configured
-	var botManager *bot.Manager
-	botCreds := []bot.BotCredentials{
-		{Username: bot1User, Password: bot1Pass},
-		{Username: bot2User, Password: bot2Pass},
-		{Username: bot3User, Password: bot3Pass},
-		{Username: bot4User, Password: bot4Pass},
-	}
-	// Filter out empty credentials
-	var validCreds []bot.BotCredentials
-	for _, cred := range botCreds {
-		if cred.Username != "" && cred.Password != "" {
-			validCreds = append(validCreds, cred)
-		}
-	}
-	if len(validCreds) > 0 {
-		// Create a command channel for bots to send commands back
-		botCommands := make(chan coordinator.Command, 100)
-		go func() {
-			for cmd := range botCommands {
-				coord.Send(cmd)
-			}
-		}()
-
-		botManager = bot.NewManager(bot.Config{
-			Bots: validCreds,
-		}, botCommands)
-		botEvents := coord.Subscribe()
-		go botManager.Run(ctx, botEvents)
-	} else {
-		log.Println("No bot credentials configured. Lobby creation will be skipped.")
-	}
 
 	// Start HTTP server
 	httpServer := &http.Server{

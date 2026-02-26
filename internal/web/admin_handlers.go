@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/auth"
+	"github.com/edvart/dota-inhouse/internal/bot"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 	"github.com/edvart/dota-inhouse/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -41,18 +42,68 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to list broken matches: %v", err)
 	}
 
+	botStatuses := []bot.Status{}
+	botOnlineCount := 0
+	if s.botManager != nil {
+		botStatuses = s.botManager.Statuses()
+		for _, status := range botStatuses {
+			if status.LoggedIn {
+				botOnlineCount++
+			}
+		}
+	}
+
 	data := map[string]interface{}{
 		"User":          user,
 		"QueueCount":    len(queue),
 		"MatchCount":    len(matches),
 		"BrokenCount":   len(brokenMatches),
 		"UsersCount":    len(users),
+		"BotCount":      len(botStatuses),
+		"BotOnlineCount": botOnlineCount,
 		"CurrentMode":   coordinator.ValidGameModes[lobbySettings.GameMode],
 		"CurrentModeID": lobbySettings.GameMode,
 		"QueueOpen":     queueOpen,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "admin.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAdminBotsPage(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+
+	botStatuses := []bot.Status{}
+	if s.botManager != nil {
+		botStatuses = s.botManager.Statuses()
+	}
+
+	availableCount := 0
+	busyCount := 0
+	disconnectedCount := 0
+	for _, status := range botStatuses {
+		switch status.State {
+		case "available":
+			availableCount++
+		case "busy":
+			busyCount++
+		default:
+			disconnectedCount++
+		}
+	}
+
+	data := map[string]interface{}{
+		"User":              user,
+		"BotStatuses":       botStatuses,
+		"TotalBots":         len(botStatuses),
+		"AvailableCount":    availableCount,
+		"BusyCount":         busyCount,
+		"DisconnectedCount": disconnectedCount,
+		"GeneratedAt":       time.Now().Format("2006-01-02 15:04:05 MST"),
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "admin-bots.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

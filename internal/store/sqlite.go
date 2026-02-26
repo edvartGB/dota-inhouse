@@ -585,8 +585,26 @@ func (s *SQLiteStore) SavePushSubscription(ctx context.Context, sub *PushSubscri
 		 ON CONFLICT(endpoint) DO UPDATE SET
 		 steam_id = excluded.steam_id,
 		 p256dh = excluded.p256dh,
-		 auth = excluded.auth`,
+		 auth = excluded.auth,
+		 created_at = CURRENT_TIMESTAMP`,
 		sub.SteamID, sub.Endpoint, sub.P256dh, sub.Auth,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Keep only the most recent subscriptions per user to avoid stale endpoint buildup.
+	_, err = s.db.ExecContext(ctx,
+		`DELETE FROM push_subscriptions
+		 WHERE steam_id = ?
+		   AND id NOT IN (
+			 SELECT id
+			 FROM push_subscriptions
+			 WHERE steam_id = ?
+			 ORDER BY created_at DESC, id DESC
+			 LIMIT 3
+		   )`,
+		sub.SteamID, sub.SteamID,
 	)
 	return err
 }
@@ -594,7 +612,9 @@ func (s *SQLiteStore) SavePushSubscription(ctx context.Context, sub *PushSubscri
 func (s *SQLiteStore) GetPushSubscriptions(ctx context.Context, steamID string) ([]PushSubscription, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, steam_id, endpoint, p256dh, auth, created_at
-		 FROM push_subscriptions WHERE steam_id = ?`,
+		 FROM push_subscriptions
+		 WHERE steam_id = ?
+		 ORDER BY created_at DESC, id DESC`,
 		steamID,
 	)
 	if err != nil {
