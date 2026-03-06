@@ -12,6 +12,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/paralin/go-dota2"
 	"github.com/paralin/go-dota2/cso"
+	devents "github.com/paralin/go-dota2/events"
 	"github.com/paralin/go-dota2/protocol"
 	"github.com/paralin/go-steam"
 	"github.com/paralin/go-steam/steamid"
@@ -38,7 +39,19 @@ type Status struct {
 	State         string
 }
 
+const gcMsgLiveScoreboardUpdate = uint32(protocol.EDOTAGCMsg_k_EMsgGCLiveScoreboardUpdate)
+
+var initSteamDirectoryOnce sync.Once
+
 func NewBot(username, password string) *Bot {
+	initSteamDirectoryOnce.Do(func() {
+		if err := steam.InitializeSteamDirectory(); err != nil {
+			log.Printf("Failed to initialize Steam Directory (using static CM list): %v", err)
+		} else {
+			log.Printf("Initialized Steam Directory CM list")
+		}
+	})
+
 	bot := &Bot{
 		name:   username,
 		client: steam.NewClient(),
@@ -49,7 +62,7 @@ func NewBot(username, password string) *Bot {
 		Password: password,
 	}
 
-	go bot.connectWithRetry(loginInfo, 10*time.Second)
+	go bot.connectWithRetry(loginInfo, 20*time.Second)
 
 	return bot
 }
@@ -69,11 +82,16 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, timeout time.Durat
 			attempt = 0 // Reset attempt counter after successful connection
 		}
 
-		// Calculate backoff: 5s, 10s, 15s, ... up to 60s max
-		backoff := time.Duration(attempt) * 5 * time.Second
-		if backoff > 60*time.Second {
-			backoff = 60 * time.Second
-		}
+			// Calculate backoff: 5s, 10s, 15s, ... up to 60s max.
+			// After any disconnect, wait at least 5s to avoid reconnect storms.
+			retryAttempt := attempt
+			if retryAttempt < 1 {
+				retryAttempt = 1
+			}
+			backoff := time.Duration(retryAttempt) * 5 * time.Second
+			if backoff > 60*time.Second {
+				backoff = 60 * time.Second
+			}
 		log.Printf("[%s] Connection failed, retrying in %v...", b.name, backoff)
 		time.Sleep(backoff)
 
@@ -86,7 +104,10 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, timeout time.Durat
 }
 
 func (b *Bot) attemptConnection(timeout time.Duration) *steam.ConnectedEvent {
-	go b.client.Connect()
+	cm := b.client.Connect()
+	if cm != nil {
+		log.Printf("[%s] Connecting to CM %s", b.name, cm.String())
+	}
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -104,21 +125,23 @@ func (b *Bot) attemptConnection(timeout time.Duration) *steam.ConnectedEvent {
 				return nil
 			}
 
-			switch e := event.(type) {
-			case *steam.ConnectedEvent:
-				return e
-			case *steam.DisconnectedEvent:
-				log.Printf("[%s] Disconnected before connect completed", b.name)
-				return nil
-			default:
-				log.Printf("[%s] Ignoring pre-connect event %T while waiting for ConnectedEvent", b.name, event)
-			}
+				switch e := event.(type) {
+				case *steam.ConnectedEvent:
+					return e
+				case *steam.DisconnectedEvent:
+					log.Printf("[%s] Disconnected before connect completed", b.name)
+					return nil
+				case error:
+					log.Printf("[%s] Pre-connect error: %v", b.name, e)
+				default:
+					log.Printf("[%s] Ignoring pre-connect event %T while waiting for ConnectedEvent", b.name, event)
+				}
 		}
 	}
 }
 
 func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}) {
-	const logonTimeout = 20 * time.Second
+	const logonTimeout = 45 * time.Second
 
 	ctx, cancel := context.WithCancel(context.Background())
 	b.mu.Lock()
@@ -175,7 +198,7 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 }
 
 func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) bool {
-	switch event.(type) {
+	switch e := event.(type) {
 	case *steam.ConnectedEvent:
 		log.Printf("[%s] Connected, logging on…", b.name)
 		b.client.Auth.LogOn(loginInfo)
@@ -186,6 +209,18 @@ func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) boo
 		b.loggedIn = true
 		b.mu.Unlock()
 		log.Printf("[%s] Logged on successfully!", b.name)
+		return false
+
+	case *steam.LogOnFailedEvent:
+		log.Printf("[%s] Logon failed: %v", b.name, e.Result)
+		return false
+
+	case *steam.SteamFailureEvent:
+		log.Printf("[%s] Steam failure reported: %v", b.name, e.Result)
+		return false
+
+	case *steam.LoggedOffEvent:
+		log.Printf("[%s] Logged off: %v", b.name, e.Result)
 		return false
 
 	case *steam.DisconnectedEvent:
@@ -201,9 +236,66 @@ func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) boo
 		}
 		// Exit the event loop so connectWithRetry can establish a fresh connection.
 		return true
+
+	case *devents.UnhandledGCPacket:
+		b.handleUnhandledGCPacket(e)
+		return false
+
+	case error:
+		log.Printf("[%s] Steam client error event: %v", b.name, e)
+		return false
 	}
 
 	return false
+}
+
+func (b *Bot) handleUnhandledGCPacket(event *devents.UnhandledGCPacket) {
+	if event == nil || event.Packet == nil {
+		return
+	}
+
+	packet := event.Packet
+	if packet.MsgType != gcMsgLiveScoreboardUpdate {
+		return
+	}
+
+	update := &protocol.CMsgDOTALiveScoreboardUpdate{}
+	if err := proto.Unmarshal(packet.Body, update); err != nil {
+		log.Printf("[%s] Failed to decode live scoreboard packet: %v", b.name, err)
+		return
+	}
+
+	teamGood := update.GetTeamGood()
+	teamBad := update.GetTeamBad()
+
+	radiantScore := uint32(0)
+	if teamGood != nil {
+		radiantScore = teamGood.GetScore()
+	}
+	direScore := uint32(0)
+	if teamBad != nil {
+		direScore = teamBad.GetScore()
+	}
+
+	radiantPlayers := 0
+	if teamGood != nil {
+		radiantPlayers = len(teamGood.GetPlayers())
+	}
+	direPlayers := 0
+	if teamBad != nil {
+		direPlayers = len(teamBad.GetPlayers())
+	}
+
+	log.Printf(
+		"[%s] GC LIVE SCOREBOARD packet: match_id=%d game_time=%.0fs score=%d-%d players=%d:%d",
+		b.name,
+		update.GetMatchId(),
+		update.GetDuration(),
+		radiantScore,
+		direScore,
+		radiantPlayers,
+		direPlayers,
+	)
 }
 
 func (b *Bot) IsAvailable() bool {
@@ -266,6 +358,8 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 		return false
 	}
 	b.busy = true
+	sessionCtx := b.ctx
+	dotaClient := b.dota2Client
 	b.mu.Unlock()
 
 	defer func() {
@@ -274,19 +368,27 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 		b.mu.Unlock()
 	}()
 
-	if b.dota2Client == nil {
+	if sessionCtx == nil {
+		log.Printf("[%s] Cannot create lobby: steam session context unavailable", b.name)
+		return false
+	}
+
+	if dotaClient == nil {
 		log.Printf("[%s] Creating new Dota 2 client", b.name)
 		logger := logrus.New()
 		logger.SetLevel(logrus.WarnLevel)
-		b.dota2Client = dota2.New(b.client, logger)
-		b.dota2Client.SetPlaying(true)
+		dotaClient = dota2.New(b.client, logger)
+		b.mu.Lock()
+		b.dota2Client = dotaClient
+		b.mu.Unlock()
+		dotaClient.SetPlaying(true)
 		time.Sleep(time.Second)
-		b.dota2Client.SayHello()
+		dotaClient.SayHello()
 		time.Sleep(3 * time.Second)
 	} else {
 		log.Printf("[%s] Reusing existing Dota 2 client", b.name)
-		b.dota2Client.SetPlaying(true)
-		b.dota2Client.SayHello()
+		dotaClient.SetPlaying(true)
+		dotaClient.SayHello()
 	}
 
 	log.Printf("[%s] Creating lobby for match %s", b.name, matchID)
@@ -305,17 +407,17 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 	if leagueID > 0 {
 		lobbyDetails.Leagueid = proto.Uint32(leagueID)
 	}
-	b.dota2Client.LeaveCreateLobby(b.ctx, lobbyDetails, true)
+	dotaClient.LeaveCreateLobby(sessionCtx, lobbyDetails, true)
 
 	log.Printf("[%s] Moving bot to unassigned pool", b.name)
-	b.dota2Client.JoinLobbyTeam(protocol.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 1)
+	dotaClient.JoinLobbyTeam(protocol.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 1)
 	time.Sleep(time.Second)
 
 	log.Printf("[%s] Inviting players", b.name)
 	for _, player := range players {
 		id, err := strconv.ParseUint(player.SteamID, 10, 64)
 		if err == nil {
-			b.dota2Client.InviteLobbyMember(steamid.SteamId(id))
+			dotaClient.InviteLobbyMember(steamid.SteamId(id))
 			log.Printf("[%s] Invited player: %s", b.name, player.Name)
 		} else {
 			log.Printf("[%s] Invalid steam ID for player %s: %v", b.name, player.Name, err)
@@ -324,16 +426,16 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 
 	commands <- coordinator.BotLobbyReady{MatchID: matchID}
 
-	b.monitorLobbyState(ctx, matchID, radiant, dire, commands)
+	b.monitorLobbyState(ctx, sessionCtx, dotaClient, matchID, radiant, dire, commands)
 	return true
 }
 
-func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRadiant []coordinator.Player, expectedDire []coordinator.Player, commands chan<- coordinator.Command) {
-	eventCh, eventCancel, err := b.dota2Client.GetCache().SubscribeType(cso.Lobby)
+func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context, dotaClient *dota2.Dota2, matchID string, expectedRadiant []coordinator.Player, expectedDire []coordinator.Player, commands chan<- coordinator.Command) {
+	eventCh, eventCancel, err := dotaClient.GetCache().SubscribeType(cso.Lobby)
 	if err != nil {
 		log.Printf("[%s] Failed to subscribe to lobby events: %v", b.name, err)
 		// Clean up the lobby we created
-		b.dota2Client.DestroyLobby(b.ctx)
+		dotaClient.DestroyLobby(sessionCtx)
 		// Notify coordinator that lobby failed (no players joined)
 		commands <- coordinator.BotLobbyTimeout{
 			MatchID:            matchID,
@@ -383,6 +485,10 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 			log.Printf("[%s] Lobby monitoring cancelled", b.name)
 			return
 
+		case <-sessionCtx.Done():
+			log.Printf("[%s] Lobby monitoring stopped: steam session ended", b.name)
+			return
+
 		case <-timeoutTimer.C:
 			if !launched && !gameEnded {
 				log.Printf("[%s] Lobby join timeout reached", b.name)
@@ -392,7 +498,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 					MatchID:            matchID,
 					PlayersJoinedRight: joinedCorrectly,
 				}
-				b.dota2Client.DestroyLobby(b.ctx)
+				dotaClient.DestroyLobby(sessionCtx)
 				return
 			}
 
@@ -455,7 +561,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 							MatchID:     matchID,
 							DotaMatchID: dotaMatchID,
 						}
-						b.dota2Client.DestroyLobby(b.ctx)
+						dotaClient.DestroyLobby(sessionCtx)
 					})
 					return
 
@@ -475,7 +581,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 						default:
 						}
 					}
-					b.dota2Client.LaunchLobby()
+					dotaClient.LaunchLobby()
 					log.Printf("[%s] Game launch command sent!", b.name)
 				}
 			}
@@ -499,7 +605,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, matchID string, expectedRad
 					default:
 					}
 				}
-				b.dota2Client.LaunchLobby()
+				dotaClient.LaunchLobby()
 				log.Printf("[%s] Relaunch command sent!", b.name)
 			} else {
 				log.Printf("[%s] Skipping relaunch attempt %d/%d: players not in correct teams",
