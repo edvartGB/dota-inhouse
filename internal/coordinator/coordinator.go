@@ -332,7 +332,7 @@ func (c *Coordinator) startDraft(match *Match) {
 		return
 	}
 
-	captains := selectCaptains(match.Players)
+	captains := assignCaptainSides(selectCaptains(match.Players))
 
 	var available []Player
 	for _, p := range match.Players {
@@ -664,7 +664,7 @@ type getPlayerMatchCmd struct {
 
 func (getPlayerMatchCmd) command() {}
 
-// selectCaptains picks two captains weighted by CaptainPriority.
+// selectCaptains picks the two highest-priority captains.
 // Equal priorities are broken randomly.
 func selectCaptains(players []Player) [2]Player {
 	if len(players) < 2 {
@@ -685,6 +685,28 @@ func selectCaptains(players []Player) [2]Player {
 	})
 
 	return [2]Player{sorted[0], sorted[1]}
+}
+
+// assignCaptainSides orders captains for drafting:
+// captains[0] becomes Radiant/first-pick, captains[1] becomes Dire/second-pick.
+// The lower numeric captain priority gets the advantage; equal priorities are randomized.
+func assignCaptainSides(captains [2]Player) [2]Player {
+	if captains[0].SteamID == "" || captains[1].SteamID == "" {
+		return captains
+	}
+
+	if captains[0].CaptainPriority == captains[1].CaptainPriority {
+		if rand.Intn(2) == 0 {
+			return captains
+		}
+		return [2]Player{captains[1], captains[0]}
+	}
+
+	if captains[0].CaptainPriority < captains[1].CaptainPriority {
+		return captains
+	}
+
+	return [2]Player{captains[1], captains[0]}
 }
 
 // getPickerForPickCount returns which captain (0=Radiant, 1=Dire) picks
