@@ -24,15 +24,13 @@ type SSEHub struct {
 	mu          sync.RWMutex
 	templates   *template.Template
 	coordinator *coordinator.Coordinator
-	devMode     bool
 }
 
-func NewSSEHub(templates *template.Template, coord *coordinator.Coordinator, devMode bool) *SSEHub {
+func NewSSEHub(templates *template.Template, coord *coordinator.Coordinator) *SSEHub {
 	return &SSEHub{
 		clients:     make(map[*SSEClient]bool),
 		templates:   templates,
 		coordinator: coord,
-		devMode:     devMode,
 	}
 }
 
@@ -191,7 +189,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			Dire:             e.Dire,
 			AvailablePlayers: e.Available,
 			CurrentPicker:    0,
-			DevMode:          h.devMode,
 			Deadline:         e.Deadline.Format(time.RFC3339),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
@@ -211,7 +208,6 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			Radiant:          e.Radiant,
 			Dire:             e.Dire,
 			CurrentPicker:    e.CurrentPicker,
-			DevMode:          h.devMode,
 			Deadline:         e.Deadline.Format(time.RFC3339),
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
@@ -383,7 +379,6 @@ type DraftData struct {
 	Radiant          []coordinator.Player
 	Dire             []coordinator.Player
 	CurrentPicker    int
-	DevMode          bool
 	Deadline         string
 }
 

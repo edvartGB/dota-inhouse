@@ -158,41 +158,6 @@ func (sa *SteamAuth) fetchSteamUser(ctx context.Context, steamID string) (*Steam
 	return &result.Response.Players[0], nil
 }
 
-// DevLoginHandler provides a development-only login mechanism.
-func (sa *SteamAuth) DevLoginHandler(w http.ResponseWriter, r *http.Request) {
-	steamID := r.URL.Query().Get("steamid")
-	name := r.URL.Query().Get("name")
-
-	if steamID == "" || name == "" {
-		http.Error(w, "steamid and name required", http.StatusBadRequest)
-		return
-	}
-
-	// Create user
-	now := time.Now()
-	user := &store.User{
-		SteamID:         steamID,
-		Name:            name,
-		AvatarURL:       "",
-		CaptainPriority: 5,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
-
-	if err := sa.store.UpsertUser(r.Context(), user); err != nil {
-		http.Error(w, "Failed to save user", http.StatusInternalServerError)
-		return
-	}
-
-	// Create session
-	if err := sa.sessions.CreateSession(r.Context(), w, steamID); err != nil {
-		http.Error(w, "Failed to create session", http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, "/", http.StatusFound)
-}
-
 // MeHandler returns the current user's info.
 func (sa *SteamAuth) MeHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := sa.sessions.GetUser(r.Context(), r)
@@ -239,25 +204,6 @@ const userContextKey contextKey = "user"
 func UserFromContext(ctx context.Context) *store.User {
 	user, _ := ctx.Value(userContextKey).(*store.User)
 	return user
-}
-
-// CreateFakeUsers creates fake users for development.
-func (sa *SteamAuth) CreateFakeUsers(ctx context.Context, count int) error {
-	now := time.Now()
-	for i := 1; i <= count; i++ {
-		user := &store.User{
-			SteamID:         fmt.Sprintf("fake_%d", i),
-			Name:            fmt.Sprintf("Player %d", i),
-			AvatarURL:       "",
-			CaptainPriority: 5,
-			CreatedAt:       now,
-			UpdatedAt:       now,
-		}
-		if err := sa.store.UpsertUser(ctx, user); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // SteamIDFromOpenIDURL extracts the Steam ID from an OpenID identity URL.

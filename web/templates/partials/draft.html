@@ -23,11 +23,7 @@
             <ul class="player-list">
                 {{range .AvailablePlayers}}
                     <li class="player pickable"
-                        {{if $.DevMode}}
-                        hx-post="/dev/pick/{{$.MatchID}}/{{.SteamID}}"
-                        {{else}}
                         hx-post="/match/{{$.MatchID}}/pick/{{.SteamID}}"
-                        {{end}}
                         hx-swap="none">
                         {{.Name}}
                     </li>

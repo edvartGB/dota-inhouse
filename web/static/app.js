@@ -174,64 +174,6 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// Test push notification
-async function testPushNotification() {
-    console.log('Testing push notification...');
-
-    // First check subscription status
-    await checkPushStatus();
-
-    try {
-        const response = await fetch('/api/push/test', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            console.log('Test notification sent:', data);
-            alert('Test notification sent! Check if you received it.');
-        } else {
-            const text = await response.text();
-            console.error('Failed to send test notification:', response.status, text);
-            alert(`Failed to send test notification: ${response.status} ${text}`);
-        }
-    } catch (error) {
-        console.error('Error testing push notification:', error);
-        alert(`Error: ${error.message}`);
-    }
-}
-
-// Check push notification status (for debugging)
-async function checkPushStatus() {
-    console.log('=== Push Notification Status ===');
-    console.log('Notification permission:', Notification.permission);
-    console.log('Service Worker support:', 'serviceWorker' in navigator);
-    console.log('Push Manager support:', 'PushManager' in window);
-
-    if ('serviceWorker' in navigator) {
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            console.log('Service Worker active:', !!registration.active);
-
-            const subscription = await registration.pushManager.getSubscription();
-            if (subscription) {
-                console.log('Push subscription exists');
-                console.log('   Endpoint:', subscription.endpoint.substring(0, 60) + '...');
-                console.log('   ExpirationTime:', subscription.expirationTime || 'Never');
-            } else {
-                console.log('No push subscription found');
-            }
-        } catch (error) {
-            console.error('Error checking service worker:', error);
-        }
-    }
-    console.log('================================');
-}
-
-
 setInterval(function() {
     document.querySelectorAll('.countdown[data-deadline]').forEach(function(el) {
         var remaining = Math.max(0, Math.floor((new Date(el.dataset.deadline) - Date.now()) / 1000));

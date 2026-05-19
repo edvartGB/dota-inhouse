@@ -73,38 +73,6 @@
             </div>
         </div>
 
-        {{if .DevMode}}
-        <div class="dev-panel">
-            <h4>Dev Tools</h4>
-            <div class="dev-buttons">
-                <button hx-post="/dev/add-fake-players" hx-swap="none" class="btn btn-secondary">
-                    Add 9 Fake Players
-                </button>
-                <button onclick="testPushNotification()" class="btn btn-secondary">
-                    🔔 Test Push Notification
-                </button>
-                {{if .Match}}
-                <div class="dev-match-tools">
-                    <p>Match: {{slice .Match.ID 0 8}}...</p>
-                    {{if eq .Match.State 2}}
-                    <button hx-post="/dev/bot/game-started/{{.Match.ID}}" hx-swap="none" class="btn btn-secondary">
-                        Simulate Game Started
-                    </button>
-                    <button hx-post="/dev/bot/lobby-timeout/{{.Match.ID}}?joined=" hx-swap="none" class="btn btn-danger">
-                        Simulate Lobby Timeout (all failed)
-                    </button>
-                    {{end}}
-                    {{if eq .Match.State 3}}
-                    <button hx-post="/dev/bot/game-ended/{{.Match.ID}}" hx-swap="none" class="btn btn-secondary">
-                        Simulate Game Ended
-                    </button>
-                    {{end}}
-                </div>
-                {{end}}
-            </div>
-        </div>
-        {{end}}
-
         <div hx-ext="sse" sse-connect="/events">
             <div sse-swap="message" style="display:none;"></div>
         </div>
@@ -142,11 +110,7 @@
             <ul class="player-list">
                 {{range .Match.AvailablePlayers}}
                     <li class="player pickable"
-                        {{if $.DevMode}}
-                        hx-post="/dev/pick/{{$.Match.ID}}/{{.SteamID}}"
-                        {{else}}
                         hx-post="/match/{{$.Match.ID}}/pick/{{.SteamID}}"
-                        {{end}}
                         hx-swap="none">
                         {{.Name}}
                     </li>

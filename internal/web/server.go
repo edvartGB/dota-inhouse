@@ -27,7 +27,6 @@ type Server struct {
 	store       store.Store
 	sse         *SSEHub
 	templates   *template.Template
-	devMode     bool
 	adminConfig *auth.AdminConfig
 	pushService *push.Service
 	botManager  *bot.Manager
@@ -35,7 +34,6 @@ type Server struct {
 }
 
 type Config struct {
-	DevMode       bool
 	AdminSteamIDs string // Comma-separated list of admin Steam IDs
 	PushService   *push.Service
 	BotManager    *bot.Manager
@@ -57,9 +55,8 @@ func NewServer(
 		steamAuth:   steamAuth,
 		sessions:    sessions,
 		store:       st,
-		sse:         NewSSEHub(templates, coord, cfg.DevMode),
+		sse:         NewSSEHub(templates, coord),
 		templates:   templates,
-		devMode:     cfg.DevMode,
 		adminConfig: auth.NewAdminConfig(cfg.AdminSteamIDs),
 		pushService: cfg.PushService,
 		botManager:  cfg.BotManager,
@@ -118,16 +115,6 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 	r.Get("/auth/logout", s.steamAuth.LogoutHandler)
 	r.Get("/me", s.steamAuth.MeHandler)
 
-	if s.devMode {
-		r.Get("/dev/login", s.steamAuth.DevLoginHandler)
-		r.Post("/dev/add-fake-players", s.handleAddFakePlayers)
-		r.Post("/dev/accept-all", s.handleDevAcceptAll)
-		r.Post("/dev/pick/{matchID}/{playerID}", s.handleDevPick)
-		r.Post("/dev/bot/game-started/{matchID}", s.handleDevBotGameStarted)
-		r.Post("/dev/bot/game-ended/{matchID}", s.handleDevBotGameEnded)
-		r.Post("/dev/bot/lobby-timeout/{matchID}", s.handleDevBotLobbyTimeout)
-	}
-
 	r.Get("/events", s.handleSSE)
 
 	// Push notification endpoints
@@ -146,7 +133,6 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		// Push subscription management
 		r.Post("/api/push/subscribe", s.handleSubscribePush)
 		r.Post("/api/push/unsubscribe", s.handleUnsubscribePush)
-		r.Post("/api/push/test", s.handleTestPush)
 	})
 
 	r.Get("/", s.handleIndex)
@@ -199,7 +185,6 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Queue:     queue,
 		Matches:   matchList,
 		QueueOpen: queueOpen,
-		DevMode:   s.devMode,
 	}
 
 	if user != nil {
@@ -227,13 +212,11 @@ type PageData struct {
 	InQueue   bool
 	InMatch   bool
 	QueueOpen bool
-	DevMode   bool
 }
 
 type HistoryPageData struct {
 	User         interface{}
 	Matches      []store.MatchWithPlayers
-	DevMode      bool
 	IsAdmin      bool
 	Page         int
 	TotalPages   int
@@ -287,7 +270,6 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	data := HistoryPageData{
 		User:         user,
 		Matches:      matches,
-		DevMode:      s.devMode,
 		IsAdmin:      isAdmin,
 		Page:         page,
 		TotalPages:   totalPages,
@@ -313,7 +295,6 @@ type LeaderboardPageData struct {
 	Preset     string
 	SortBy     string
 	SortDir    string
-	DevMode    bool
 }
 
 func sanitizeLeaderboardSort(sortBy, sortDir string) (string, string) {
@@ -460,7 +441,6 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		Preset:     preset,
 		SortBy:     sortBy,
 		SortDir:    sortDir,
-		DevMode:    s.devMode,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {

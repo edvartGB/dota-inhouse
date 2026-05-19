@@ -44,7 +44,6 @@ func main() {
 	baseURL := getEnv("BASE_URL", "http://localhost:"+port)
 	steamAPIKey := getEnv("STEAM_API_KEY", "")
 	dbPath := getEnv("DATABASE_PATH", "./data/inhouse.db")
-	devMode := getEnv("DEV_MODE", "") == "true"
 
 	// Bot credentials (host bots)
 	bot1User := getEnv("BOT1_USERNAME", "")
@@ -95,7 +94,7 @@ func main() {
 		log.Fatal("Could not find project root (looking for web/ directory)")
 	}
 
-	if steamAPIKey == "" && !devMode {
+	if steamAPIKey == "" {
 		log.Println("Warning: STEAM_API_KEY not set. Steam login will not work.")
 	}
 
@@ -134,14 +133,6 @@ func main() {
 	// Initialize auth
 	sessions := auth.NewSessionManager(db)
 	steamAuth := auth.NewSteamAuth(steamAPIKey, baseURL, db, sessions)
-
-	// Create fake users in dev mode
-	if devMode {
-		log.Println("Dev mode enabled")
-		if err := steamAuth.CreateFakeUsers(context.Background(), 15); err != nil {
-			log.Printf("Failed to create fake users: %v", err)
-		}
-	}
 
 	// Load templates from filesystem
 	templatesDir := filepath.Join(projectRoot, "web", "templates")
@@ -203,7 +194,6 @@ func main() {
 
 	// Initialize web server
 	server := web.NewServer(coord, steamAuth, sessions, db, templates, staticFS, web.Config{
-		DevMode:       devMode,
 		AdminSteamIDs: adminSteamIDs,
 		PushService:   pushService,
 		BotManager:    botManager,
@@ -294,9 +284,6 @@ func main() {
 	}()
 
 	fmt.Printf("Server running on http://localhost:%s\n", port)
-	if devMode {
-		fmt.Printf("Dev login: http://localhost:%s/dev/login?steamid=test1&name=TestUser\n", port)
-	}
 
 	if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("HTTP server error: %v", err)

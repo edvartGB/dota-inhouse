@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/edvart/dota-inhouse/internal/auth"
-	"github.com/edvart/dota-inhouse/internal/push"
 	"github.com/edvart/dota-inhouse/internal/store"
 )
 
@@ -83,37 +82,4 @@ func (s *Server) handleGetVAPIDPublicKey(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(map[string]string{
 		"publicKey": s.pushService.GetPublicKey(),
 	})
-}
-
-// handleTestPush sends a test push notification to the current user
-func (s *Server) handleTestPush(w http.ResponseWriter, r *http.Request) {
-	if s.pushService == nil {
-		http.Error(w, "Push notifications not configured", http.StatusServiceUnavailable)
-		return
-	}
-
-	user := auth.UserFromContext(r.Context())
-	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	payload := push.NotificationPayload{
-		Title: "Test Notification 🧪",
-		Body:  "If you see this, push notifications are working!",
-		Icon:  "/static/favicon.ico",
-		Badge: "/static/favicon.ico",
-		Tag:   "test-notification",
-		Data: map[string]interface{}{
-			"url": "/",
-		},
-	}
-
-	if err := s.pushService.SendToUser(r.Context(), user.SteamID, payload); err != nil {
-		http.Error(w, "Failed to send test notification", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "Test notification sent"})
 }
