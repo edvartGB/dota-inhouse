@@ -20,15 +20,14 @@ import (
 )
 
 type Bot struct {
-	name         string
-	client       *steam.Client
-	dota2Client  *dota2.Dota2
-	loggedIn     bool
-	busy         bool
-	autoEndDelay time.Duration
-	ctx          context.Context
-	cancel       context.CancelFunc
-	mu           sync.Mutex
+	name        string
+	client      *steam.Client
+	dota2Client *dota2.Dota2
+	loggedIn    bool
+	busy        bool
+	ctx         context.Context
+	cancel      context.CancelFunc
+	mu          sync.Mutex
 }
 
 type Status struct {
@@ -82,16 +81,16 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, timeout time.Durat
 			attempt = 0 // Reset attempt counter after successful connection
 		}
 
-			// Calculate backoff: 5s, 10s, 15s, ... up to 60s max.
-			// After any disconnect, wait at least 5s to avoid reconnect storms.
-			retryAttempt := attempt
-			if retryAttempt < 1 {
-				retryAttempt = 1
-			}
-			backoff := time.Duration(retryAttempt) * 5 * time.Second
-			if backoff > 60*time.Second {
-				backoff = 60 * time.Second
-			}
+		// Calculate backoff: 5s, 10s, 15s, ... up to 60s max.
+		// After any disconnect, wait at least 5s to avoid reconnect storms.
+		retryAttempt := attempt
+		if retryAttempt < 1 {
+			retryAttempt = 1
+		}
+		backoff := time.Duration(retryAttempt) * 5 * time.Second
+		if backoff > 60*time.Second {
+			backoff = 60 * time.Second
+		}
 		log.Printf("[%s] Connection failed, retrying in %v...", b.name, backoff)
 		time.Sleep(backoff)
 
@@ -125,17 +124,17 @@ func (b *Bot) attemptConnection(timeout time.Duration) *steam.ConnectedEvent {
 				return nil
 			}
 
-				switch e := event.(type) {
-				case *steam.ConnectedEvent:
-					return e
-				case *steam.DisconnectedEvent:
-					log.Printf("[%s] Disconnected before connect completed", b.name)
-					return nil
-				case error:
-					log.Printf("[%s] Pre-connect error: %v", b.name, e)
-				default:
-					log.Printf("[%s] Ignoring pre-connect event %T while waiting for ConnectedEvent", b.name, event)
-				}
+			switch e := event.(type) {
+			case *steam.ConnectedEvent:
+				return e
+			case *steam.DisconnectedEvent:
+				log.Printf("[%s] Disconnected before connect completed", b.name)
+				return nil
+			case error:
+				log.Printf("[%s] Pre-connect error: %v", b.name, e)
+			default:
+				log.Printf("[%s] Ignoring pre-connect event %T while waiting for ConnectedEvent", b.name, event)
+			}
 		}
 	}
 }

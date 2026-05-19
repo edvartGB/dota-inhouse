@@ -1,6 +1,8 @@
+.DS_Store
 .claude
 set_env.sh
 restart.sh
+*.swp
 *.exe
 *.exe~
 *.dll

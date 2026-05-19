@@ -25,8 +25,7 @@ type Manager struct {
 
 // Config holds bot configuration.
 type Config struct {
-	Bots         []BotCredentials
-	AutoEndDelay time.Duration
+	Bots []BotCredentials
 }
 
 // BotCredentials holds login credentials for a single bot.

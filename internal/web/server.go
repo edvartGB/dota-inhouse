@@ -13,7 +13,6 @@ import (
 	"github.com/edvart/dota-inhouse/internal/auth"
 	"github.com/edvart/dota-inhouse/internal/bot"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
-	discordsvc "github.com/edvart/dota-inhouse/internal/discord"
 	"github.com/edvart/dota-inhouse/internal/push"
 	"github.com/edvart/dota-inhouse/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -31,18 +30,16 @@ type Server struct {
 	devMode     bool
 	adminConfig *auth.AdminConfig
 	pushService *push.Service
-	discordSvc  *discordsvc.Service
 	botManager  *bot.Manager
 	logPath     string
 }
 
 type Config struct {
-	DevMode        bool
-	AdminSteamIDs  string // Comma-separated list of admin Steam IDs
-	PushService    *push.Service
-	DiscordService *discordsvc.Service
-	BotManager     *bot.Manager
-	LogPath        string
+	DevMode       bool
+	AdminSteamIDs string // Comma-separated list of admin Steam IDs
+	PushService   *push.Service
+	BotManager    *bot.Manager
+	LogPath       string
 }
 
 func NewServer(
@@ -65,7 +62,6 @@ func NewServer(
 		devMode:     cfg.DevMode,
 		adminConfig: auth.NewAdminConfig(cfg.AdminSteamIDs),
 		pushService: cfg.PushService,
-		discordSvc:  cfg.DiscordService,
 		botManager:  cfg.BotManager,
 		logPath:     cfg.LogPath,
 	}
@@ -165,7 +161,6 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Get("/admin/matches", s.handleAdminMatchesPage)
 		r.Get("/admin/captains", s.handleAdminCaptainsPage)
 		r.Get("/admin/settings", s.handleAdminSettingsPage)
-		r.Get("/admin/discord", s.handleAdminDiscordPage)
 		r.Get("/admin/bots", s.handleAdminBotsPage)
 		r.Get("/admin/broken-matches", s.handleAdminBrokenMatchesPage)
 		r.Get("/admin/state", s.handleAdminState)
@@ -174,7 +169,6 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Post("/admin/queue/kick/{playerID}", s.handleAdminKickPlayer)
 		r.Post("/admin/player/{playerID}/priority/{priority}", s.handleAdminSetCaptainPriority)
 		r.Post("/admin/settings", s.handleAdminSetLobbySettings)
-		r.Post("/admin/discord/ping", s.handleAdminDiscordPing)
 		r.Post("/admin/queue/{status}", s.handleAdminSetQueueStatus)
 		r.Post("/admin/history/{matchID}/result/{winner}", s.handleAdminSetHistoryResult)
 		r.Post("/admin/history/{matchID}/repair", s.handleAdminRepairHistoryMatch)
@@ -291,17 +285,17 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := HistoryPageData{
-		User:    user,
-		Matches: matches,
-		DevMode: s.devMode,
-		IsAdmin: isAdmin,
-		Page:    page,
-		TotalPages: totalPages,
+		User:         user,
+		Matches:      matches,
+		DevMode:      s.devMode,
+		IsAdmin:      isAdmin,
+		Page:         page,
+		TotalPages:   totalPages,
 		TotalMatches: totalMatches,
-		HasPrev: page > 1,
-		HasNext: page < totalPages,
-		PrevPage: page - 1,
-		NextPage: page + 1,
+		HasPrev:      page > 1,
+		HasNext:      page < totalPages,
+		PrevPage:     page - 1,
+		NextPage:     page + 1,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "history.html", data); err != nil {

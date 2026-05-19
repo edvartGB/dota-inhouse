@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -54,16 +52,16 @@ func (s *Server) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]interface{}{
-		"User":          user,
-		"QueueCount":    len(queue),
-		"MatchCount":    len(matches),
-		"BrokenCount":   len(brokenMatches),
-		"UsersCount":    len(users),
-		"BotCount":      len(botStatuses),
+		"User":           user,
+		"QueueCount":     len(queue),
+		"MatchCount":     len(matches),
+		"BrokenCount":    len(brokenMatches),
+		"UsersCount":     len(users),
+		"BotCount":       len(botStatuses),
 		"BotOnlineCount": botOnlineCount,
-		"CurrentMode":   coordinator.ValidGameModes[lobbySettings.GameMode],
-		"CurrentModeID": lobbySettings.GameMode,
-		"QueueOpen":     queueOpen,
+		"CurrentMode":    coordinator.ValidGameModes[lobbySettings.GameMode],
+		"CurrentModeID":  lobbySettings.GameMode,
+		"QueueOpen":      queueOpen,
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "admin.html", data); err != nil {
@@ -510,90 +508,6 @@ func (s *Server) handleAdminLogs(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Template error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
-}
-
-func (s *Server) handleAdminDiscordPage(w http.ResponseWriter, r *http.Request) {
-	user := auth.UserFromContext(r.Context())
-	users, err := s.store.ListUsers(r.Context())
-	if err != nil {
-		log.Printf("Failed to list users for Discord admin page: %v", err)
-		http.Error(w, "Failed to load users", http.StatusInternalServerError)
-		return
-	}
-
-	data := map[string]interface{}{
-		"User":            user,
-		"Users":           users,
-		"DiscordEnabled":  s.discordSvc != nil,
-		"Error":           r.URL.Query().Get("error"),
-		"SelectedSteamID": r.URL.Query().Get("steam_id"),
-		"DefaultMessage":  "Match accept check-in. Please review the queue page.",
-	}
-
-	if err := s.templates.ExecuteTemplate(w, "admin-discord.html", data); err != nil {
-		log.Printf("Template error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
-}
-
-func (s *Server) handleAdminDiscordPing(w http.ResponseWriter, r *http.Request) {
-	if s.discordSvc == nil {
-		redirectAdminDiscordError(w, r, "", "Discord bot is not configured")
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		redirectAdminDiscordError(w, r, "", "Invalid form data")
-		return
-	}
-
-	steamID := strings.TrimSpace(r.FormValue("steam_id"))
-	if steamID == "" {
-		redirectAdminDiscordError(w, r, "", "Select a user")
-		return
-	}
-
-	user, err := s.store.GetUser(r.Context(), steamID)
-	if err != nil {
-		redirectAdminDiscordError(w, r, steamID, "Failed to load user")
-		return
-	}
-	if user == nil {
-		redirectAdminDiscordError(w, r, steamID, "User not found")
-		return
-	}
-	if strings.TrimSpace(user.DiscordUserID) == "" {
-		redirectAdminDiscordError(w, r, steamID, "User has no Discord user ID linked")
-		return
-	}
-
-	message := strings.TrimSpace(r.FormValue("message"))
-	if message == "" {
-		redirectAdminDiscordError(w, r, steamID, "Message cannot be empty")
-		return
-	}
-	if len(message) > 300 {
-		redirectAdminDiscordError(w, r, steamID, "Message must be 300 characters or less")
-		return
-	}
-
-	content := fmt.Sprintf("Manual admin ping for %s:\n<@%s> %s", user.Name, user.DiscordUserID, message)
-	if err := s.discordSvc.SendMessage(r.Context(), content, []string{user.DiscordUserID}); err != nil {
-		log.Printf("Admin Discord ping failed for %s: %v", user.SteamID, err)
-		redirectAdminDiscordError(w, r, steamID, "Failed to send Discord message")
-		return
-	}
-
-	log.Printf("Admin sent manual Discord ping to %s (%s)", user.Name, user.SteamID)
-	http.Redirect(w, r, "/admin/discord?steam_id="+url.QueryEscape(steamID), http.StatusSeeOther)
-}
-
-func redirectAdminDiscordError(w http.ResponseWriter, r *http.Request, steamID, message string) {
-	target := "/admin/discord?error=" + url.QueryEscape(message)
-	if steamID != "" {
-		target += "&steam_id=" + url.QueryEscape(steamID)
-	}
-	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 // readLogTail returns the last n lines from the log file.

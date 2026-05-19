@@ -38,8 +38,6 @@ func (s *SQLiteStore) migrate() error {
 			steam_id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			avatar_url TEXT,
-			discord_username TEXT,
-			discord_user_id TEXT,
 			captain_priority INTEGER DEFAULT 5,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -88,8 +86,6 @@ func (s *SQLiteStore) migrate() error {
 	// Run optional migrations that may fail (e.g., adding columns that might already exist)
 	optionalMigrations := []string{
 		`ALTER TABLE matches ADD COLUMN duration INTEGER`,
-		`ALTER TABLE users ADD COLUMN discord_username TEXT`,
-		`ALTER TABLE users ADD COLUMN discord_user_id TEXT`,
 	}
 	for _, m := range optionalMigrations {
 		s.db.Exec(m) // Ignore errors - column may already exist
@@ -105,10 +101,10 @@ func (s *SQLiteStore) Close() error {
 func (s *SQLiteStore) GetUser(ctx context.Context, steamID string) (*User, error) {
 	var user User
 	err := s.db.QueryRowContext(ctx,
-		`SELECT steam_id, name, avatar_url, COALESCE(discord_username, ''), COALESCE(discord_user_id, ''), captain_priority, created_at, updated_at
+		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at
 		 FROM users WHERE steam_id = ?`, steamID).Scan(
 		&user.SteamID, &user.Name, &user.AvatarURL,
-		&user.DiscordUsername, &user.DiscordUserID, &user.CaptainPriority, &user.CreatedAt, &user.UpdatedAt,
+		&user.CaptainPriority, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -132,30 +128,12 @@ func (s *SQLiteStore) UpsertUser(ctx context.Context, user *User) error {
 	return err
 }
 
-func (s *SQLiteStore) UpdateUserDisplayName(ctx context.Context, steamID, displayName string) error {
-	result, err := s.db.ExecContext(ctx,
-		`UPDATE users SET name = ?, updated_at = ? WHERE steam_id = ?`,
-		displayName, time.Now(), steamID,
-	)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return fmt.Errorf("user not found")
-	}
-	return nil
-}
-
-func (s *SQLiteStore) UpdateUserProfile(ctx context.Context, steamID, displayName, discordUsername, discordUserID string) error {
+func (s *SQLiteStore) UpdateUserProfile(ctx context.Context, steamID, displayName string) error {
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE users
-		 SET name = ?, discord_username = ?, discord_user_id = ?, updated_at = ?
+		 SET name = ?, updated_at = ?
 		 WHERE steam_id = ?`,
-		displayName, discordUsername, discordUserID, time.Now(), steamID,
+		displayName, time.Now(), steamID,
 	)
 	if err != nil {
 		return err
@@ -172,7 +150,7 @@ func (s *SQLiteStore) UpdateUserProfile(ctx context.Context, steamID, displayNam
 
 func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT steam_id, name, avatar_url, COALESCE(discord_username, ''), COALESCE(discord_user_id, ''), captain_priority, created_at, updated_at
+		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at
 		 FROM users ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -182,7 +160,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.SteamID, &u.Name, &u.AvatarURL, &u.DiscordUsername, &u.DiscordUserID, &u.CaptainPriority, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.SteamID, &u.Name, &u.AvatarURL, &u.CaptainPriority, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -278,23 +256,6 @@ func (s *SQLiteStore) GetMatch(ctx context.Context, matchID string) (*Match, err
 	return &match, nil
 }
 
-func (s *SQLiteStore) SetMatchWinner(ctx context.Context, matchID string, winner string) error {
-	result, err := s.db.ExecContext(ctx,
-		`UPDATE matches SET winner = ? WHERE id = ?`,
-		winner, matchID)
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return fmt.Errorf("match not found")
-	}
-	return nil
-}
-
 func (s *SQLiteStore) AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO match_players (match_id, steam_id, team, was_captain, accepted)
@@ -302,26 +263,6 @@ func (s *SQLiteStore) AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error
 		mp.MatchID, mp.SteamID, mp.Team, mp.WasCaptain, mp.Accepted,
 	)
 	return err
-}
-
-func (s *SQLiteStore) GetMatchPlayers(ctx context.Context, matchID string) ([]MatchPlayer, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT match_id, steam_id, team, was_captain, accepted
-		 FROM match_players WHERE match_id = ?`, matchID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var players []MatchPlayer
-	for rows.Next() {
-		var mp MatchPlayer
-		if err := rows.Scan(&mp.MatchID, &mp.SteamID, &mp.Team, &mp.WasCaptain, &mp.Accepted); err != nil {
-			return nil, err
-		}
-		players = append(players, mp)
-	}
-	return players, rows.Err()
 }
 
 func (s *SQLiteStore) ListMatches(ctx context.Context, limit int) ([]Match, error) {
@@ -616,28 +557,6 @@ func (s *SQLiteStore) GetPushSubscriptions(ctx context.Context, steamID string) 
 		 WHERE steam_id = ?
 		 ORDER BY created_at DESC, id DESC`,
 		steamID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var subs []PushSubscription
-	for rows.Next() {
-		var sub PushSubscription
-		if err := rows.Scan(&sub.ID, &sub.SteamID, &sub.Endpoint, &sub.P256dh, &sub.Auth, &sub.CreatedAt); err != nil {
-			return nil, err
-		}
-		subs = append(subs, sub)
-	}
-
-	return subs, rows.Err()
-}
-
-func (s *SQLiteStore) GetAllPushSubscriptions(ctx context.Context) ([]PushSubscription, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, steam_id, endpoint, p256dh, auth, created_at
-		 FROM push_subscriptions`,
 	)
 	if err != nil {
 		return nil, err

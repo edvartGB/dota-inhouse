@@ -9,8 +9,6 @@ type User struct {
 	SteamID         string
 	Name            string
 	AvatarURL       string
-	DiscordUsername string
-	DiscordUserID   string
 	CaptainPriority int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -52,8 +50,7 @@ type MatchPlayerInfo struct {
 type Store interface {
 	GetUser(ctx context.Context, steamID string) (*User, error)
 	UpsertUser(ctx context.Context, user *User) error
-	UpdateUserDisplayName(ctx context.Context, steamID, displayName string) error
-	UpdateUserProfile(ctx context.Context, steamID, displayName, discordUsername, discordUserID string) error
+	UpdateUserProfile(ctx context.Context, steamID, displayName string) error
 	ListUsers(ctx context.Context) ([]User, error)
 	UpdateCaptainPriority(ctx context.Context, steamID string, priority int) error
 
@@ -65,10 +62,8 @@ type Store interface {
 	CreateMatch(ctx context.Context, match *Match) error
 	UpdateMatch(ctx context.Context, match *Match) error
 	GetMatch(ctx context.Context, matchID string) (*Match, error)
-	SetMatchWinner(ctx context.Context, matchID string, winner string) error
 
 	AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error
-	GetMatchPlayers(ctx context.Context, matchID string) ([]MatchPlayer, error)
 
 	ListMatches(ctx context.Context, limit int) ([]Match, error)
 	ListMatchesPage(ctx context.Context, limit, offset int) ([]Match, error)
@@ -82,7 +77,6 @@ type Store interface {
 	// Push subscriptions
 	SavePushSubscription(ctx context.Context, sub *PushSubscription) error
 	GetPushSubscriptions(ctx context.Context, steamID string) ([]PushSubscription, error)
-	GetAllPushSubscriptions(ctx context.Context) ([]PushSubscription, error)
 	DeletePushSubscription(ctx context.Context, endpoint string) error
 
 	Close() error
