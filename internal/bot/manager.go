@@ -103,6 +103,8 @@ func (m *Manager) handleLobbyRequest(ctx context.Context, req coordinator.Reques
 	log.Printf("Looking for available bot for match %s", req.MatchID)
 
 	matchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	m.mu.Lock()
 	m.matchToBotCtx[req.MatchID] = cancel
 	m.mu.Unlock()
@@ -113,33 +115,75 @@ func (m *Manager) handleLobbyRequest(ctx context.Context, req coordinator.Reques
 		m.mu.Unlock()
 	}()
 
+	failedBots := make(map[*Bot]bool)
+
 	for {
-		bot := m.getAvailableBot()
+		select {
+		case <-matchCtx.Done():
+			log.Printf("Bot request cancelled for match %s", req.MatchID)
+			return
+		default:
+		}
+
+		bot := m.getAvailableBot(failedBots)
 		if bot != nil {
 			log.Printf("Assigning bot %s to match %s", bot.name, req.MatchID)
 			if bot.CreateLobby(matchCtx, req.MatchID, req.Players, req.Radiant, req.Dire, req.GameMode, req.LeagueID, m.commands) {
 				return
 			}
-			log.Printf("Bot %s failed to create lobby, trying another...", bot.name)
+			failedBots[bot] = true
+			log.Printf("Bot %s failed to create lobby for match %s, trying another bot...", bot.name, req.MatchID)
+
+			if len(failedBots) >= m.botCount() {
+				log.Printf("All bots failed to create lobby for match %s, retrying in %v...", req.MatchID, BotRetryInterval)
+				if !waitForRetry(matchCtx, BotRetryInterval) {
+					log.Printf("Bot request cancelled for match %s", req.MatchID)
+					return
+				}
+				failedBots = make(map[*Bot]bool)
+			}
 			continue
 		}
 
-		log.Printf("No available bot for match %s, retrying in %v...", req.MatchID, BotRetryInterval)
+		if len(failedBots) > 0 {
+			log.Printf("No untried available bot for match %s, retrying in %v...", req.MatchID, BotRetryInterval)
+		} else {
+			log.Printf("No available bot for match %s, retrying in %v...", req.MatchID, BotRetryInterval)
+		}
 
-		select {
-		case <-matchCtx.Done():
+		if !waitForRetry(matchCtx, BotRetryInterval) {
 			log.Printf("Bot request cancelled for match %s", req.MatchID)
 			return
-		case <-time.After(BotRetryInterval):
 		}
 	}
 }
 
-func (m *Manager) getAvailableBot() *Bot {
+func waitForRetry(ctx context.Context, interval time.Duration) bool {
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func (m *Manager) botCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.bots)
+}
+
+func (m *Manager) getAvailableBot(exclude map[*Bot]bool) *Bot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	for _, bot := range m.bots {
+		if exclude[bot] {
+			continue
+		}
 		if bot.IsAvailable() {
 			return bot
 		}

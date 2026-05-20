@@ -59,10 +59,28 @@
             {{range .Matches}}
                 <li class="match-item {{.State | matchStateClass}}">
                     <span class="match-status-badge">{{.State | matchStateName}}</span>
-                    <div class="match-teams">
-                        <span class="team-radiant">{{range $i, $p := .Radiant}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
+                    <div class="match-teams active-match-teams">
+                        <div class="active-match-team active-match-team-radiant">
+                            <h4>Radiant</h4>
+                            <ul class="active-match-player-list">
+                                {{range .Radiant}}
+                                    <li class="active-match-player">{{.Name}}</li>
+                                {{else}}
+                                    <li class="active-match-player empty-team">No picks yet</li>
+                                {{end}}
+                            </ul>
+                        </div>
                         <span class="vs">vs</span>
-                        <span class="team-dire">{{range $i, $p := .Dire}}{{if $i}}, {{end}}{{$p.Name}}{{end}}</span>
+                        <div class="active-match-team active-match-team-dire">
+                            <h4>Dire</h4>
+                            <ul class="active-match-player-list">
+                                {{range .Dire}}
+                                    <li class="active-match-player">{{.Name}}</li>
+                                {{else}}
+                                    <li class="active-match-player empty-team">No picks yet</li>
+                                {{end}}
+                            </ul>
+                        </div>
                     </div>
                 </li>
             {{end}}

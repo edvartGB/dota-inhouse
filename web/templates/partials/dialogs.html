@@ -84,6 +84,19 @@
 </div>
 {{end}}
 
+{{define "match-in-progress"}}
+<div id="match-area" hx-swap-oob="true">
+    <div class="match-status">
+        <h3>Match in Progress</h3>
+        <p>Dota 2 Match ID: {{.DotaMatchID}}</p>
+    </div>
+</div>
+{{end}}
+
+{{define "empty-match-area"}}
+<div id="match-area" hx-swap-oob="true"></div>
+{{end}}
+
 {{define "draft-cancelled"}}
 <div id="match-area" hx-swap-oob="true">
     <div class="notification error">

@@ -260,6 +260,61 @@ main {
     margin: 0 0.25rem;
 }
 
+.active-match-teams {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.6rem;
+    align-items: start;
+}
+
+.active-match-team {
+    min-width: 0;
+}
+
+.active-match-team h4 {
+    margin-bottom: 0.35rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.active-match-team-radiant h4 {
+    color: var(--accent-radiant);
+}
+
+.active-match-team-dire h4 {
+    color: var(--accent-dire);
+    text-align: right;
+}
+
+.active-match-player-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.active-match-player {
+    color: var(--text-primary);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.active-match-team-dire .active-match-player {
+    text-align: right;
+}
+
+.active-match-player.empty-team {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.active-match-teams .vs {
+    align-self: start;
+    margin: 1.45rem 0 0;
+    font-size: 0.75rem;
+}
+
 /* Draft Panel */
 .draft-panel {
     background: var(--bg-secondary);

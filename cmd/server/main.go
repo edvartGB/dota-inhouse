@@ -215,14 +215,9 @@ func main() {
 		go botManager.Run(ctx, botEvents)
 	}
 
-	// Initialize Dota API client (uses same Steam API key)
-	var dotaAPIClient *dotaapi.Client
-	if steamAPIKey != "" {
-		dotaAPIClient = dotaapi.NewClient(steamAPIKey)
-		log.Println("Dota API client initialized")
-	} else {
-		log.Println("Warning: No Steam API key, match details won't be fetched from Dota API")
-	}
+	// Initialize OpenDota client for match result lookup.
+	dotaAPIClient := dotaapi.NewClient()
+	log.Println("OpenDota API client initialized")
 
 	// Start match recorder
 	recorder := matchrecorder.New(db, dotaAPIClient)

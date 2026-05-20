@@ -96,13 +96,13 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 	if e.DotaMatchID != 0 && r.dotaAPI != nil {
 		details, err := r.fetchWithRetry(ctx, e.DotaMatchID)
 		if err != nil {
-			log.Printf("Match recorder: failed to fetch Dota API details for match %d after retries: %v", e.DotaMatchID, err)
+			log.Printf("Match recorder: failed to fetch OpenDota API details for match %d after retries: %v", e.DotaMatchID, err)
 			winner = e.Winner
 		} else {
 			w := details.Winner()
 			winner = &w
 			duration = &details.Duration
-			log.Printf("Match recorder: fetched Dota API details - winner: %s, duration: %s", w, details.DurationFormatted())
+			log.Printf("Match recorder: fetched OpenDota API details - winner: %s, duration: %s", w, details.DurationFormatted())
 		}
 	} else {
 		winner = e.Winner
@@ -177,7 +177,7 @@ func (r *Recorder) fetchWithRetry(ctx context.Context, matchID uint64) (*dotaapi
 	for i, delay := range delays {
 		attempt := i + 1
 		if delay > 0 {
-			log.Printf("Match recorder: retrying Dota API fetch for match %d (attempt %d/%d) in %s", matchID, attempt, len(delays), delay)
+			log.Printf("Match recorder: retrying OpenDota API fetch for match %d (attempt %d/%d) in %s", matchID, attempt, len(delays), delay)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -188,7 +188,7 @@ func (r *Recorder) fetchWithRetry(ctx context.Context, matchID uint64) (*dotaapi
 		if err == nil {
 			return details, nil
 		}
-		log.Printf("Match recorder: Dota API fetch failed for match %d on attempt %d/%d: %v", matchID, attempt, len(delays), err)
+		log.Printf("Match recorder: OpenDota API fetch failed for match %d on attempt %d/%d: %v", matchID, attempt, len(delays), err)
 		lastErr = err
 	}
 	return nil, lastErr

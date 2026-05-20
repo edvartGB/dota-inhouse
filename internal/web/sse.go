@@ -421,6 +421,100 @@ func (h *SSEHub) renderInitialState(userID string) string {
 		return ""
 	}
 
+	if matchHTML := h.renderCurrentMatchArea(userID); matchHTML != "" {
+		buf.WriteString(matchHTML)
+	}
+
+	return buf.String()
+}
+
+func (h *SSEHub) renderCurrentMatchArea(userID string) string {
+	if userID == "" {
+		return ""
+	}
+
+	match := h.coordinator.GetPlayerMatch(userID)
+	if match == nil {
+		var buf bytes.Buffer
+		if err := h.templates.ExecuteTemplate(&buf, "empty-match-area", nil); err != nil {
+			log.Printf("Failed to render empty match area: %v", err)
+			return ""
+		}
+		return buf.String()
+	}
+
+	var buf bytes.Buffer
+	switch match.State {
+	case coordinator.MatchStateAccepting:
+		userAccepted := match.AcceptedPlayers[userID]
+		data := struct {
+			MatchID      string
+			Players      []coordinator.Player
+			Accepted     map[string]bool
+			Deadline     string
+			Count        int
+			Total        int
+			UserID       string
+			UserAccepted bool
+		}{
+			MatchID:      match.ID,
+			Players:      match.Players,
+			Accepted:     match.AcceptedPlayers,
+			Deadline:     match.AcceptDeadline.Format(time.RFC3339),
+			Count:        len(match.AcceptedPlayers),
+			Total:        coordinator.MaxPlayers,
+			UserID:       userID,
+			UserAccepted: userAccepted,
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "accept-dialog", data); err != nil {
+			log.Printf("Failed to render initial accept dialog: %v", err)
+			return ""
+		}
+
+	case coordinator.MatchStateDrafting:
+		data := DraftData{
+			MatchID:          match.ID,
+			Captains:         match.Captains,
+			AvailablePlayers: match.AvailablePlayers,
+			Radiant:          match.Radiant,
+			Dire:             match.Dire,
+			CurrentPicker:    match.CurrentPicker,
+			Deadline:         match.PickDeadline.Format(time.RFC3339),
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
+			log.Printf("Failed to render initial draft: %v", err)
+			return ""
+		}
+
+	case coordinator.MatchStateWaitingForBot:
+		data := struct {
+			MatchID  string
+			Message  string
+			Deadline string
+		}{
+			MatchID:  match.ID,
+			Message:  "Waiting for Dota 2 lobby...",
+			Deadline: match.LobbyDeadline.Format(time.RFC3339),
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
+			log.Printf("Failed to render initial waiting state: %v", err)
+			return ""
+		}
+
+	case coordinator.MatchStateInProgress:
+		data := struct {
+			MatchID     string
+			DotaMatchID uint64
+		}{
+			MatchID:     match.ID,
+			DotaMatchID: match.DotaMatchID,
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "match-in-progress", data); err != nil {
+			log.Printf("Failed to render initial in-progress state: %v", err)
+			return ""
+		}
+	}
+
 	return buf.String()
 }
 
@@ -495,10 +589,16 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 		flusher.Flush()
 	}
 
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ": heartbeat\n\n")
+			flusher.Flush()
 		case msg, ok := <-client.Channel:
 			if !ok {
 				return

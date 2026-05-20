@@ -11,26 +11,26 @@ import (
 )
 
 const (
-	baseURL = "https://api.steampowered.com/IDOTA2Match_570/GetMatchDetails/v1"
+	baseURL = "https://api.opendota.com/api/matches"
 )
 
-// Client handles Dota 2 Web API requests.
+// Client handles OpenDota API requests.
 type Client struct {
-	apiKey     string
+	baseURL    string
 	httpClient *http.Client
 }
 
-// NewClient creates a new Dota 2 API client.
-func NewClient(apiKey string) *Client {
+// NewClient creates a new OpenDota API client.
+func NewClient() *Client {
 	return &Client{
-		apiKey: apiKey,
+		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
 }
 
-// MatchDetails contains the relevant match information from the API.
+// MatchDetails contains the relevant match information from OpenDota.
 type MatchDetails struct {
 	MatchID      uint64 `json:"match_id"`
 	RadiantWin   bool   `json:"radiant_win"`
@@ -41,18 +41,9 @@ type MatchDetails struct {
 	DireScore    int    `json:"dire_score"`
 }
 
-// apiResponse wraps the API response.
-type apiResponse struct {
-	Result MatchDetails `json:"result"`
-}
-
-// GetMatchDetails fetches match details from the Dota 2 API.
+// GetMatchDetails fetches match details from OpenDota.
 func (c *Client) GetMatchDetails(ctx context.Context, matchID uint64) (*MatchDetails, error) {
-	if c.apiKey == "" {
-		return nil, fmt.Errorf("no API key configured")
-	}
-
-	url := fmt.Sprintf("%s?key=%s&match_id=%d", baseURL, c.apiKey, matchID)
+	url := fmt.Sprintf("%s/%d", strings.TrimRight(c.baseURL, "/"), matchID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -74,17 +65,17 @@ func (c *Client) GetMatchDetails(ctx context.Context, matchID uint64) (*MatchDet
 		return nil, fmt.Errorf("API returned status %d (%s): %q", resp.StatusCode, resp.Status, body)
 	}
 
-	var result apiResponse
+	var result MatchDetails
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Check if match was found (match_id will be 0 if not found)
-	if result.Result.MatchID == 0 {
+	// Check if match was found (match_id will be 0 if not found).
+	if result.MatchID == 0 {
 		return nil, fmt.Errorf("match not found")
 	}
 
-	return &result.Result, nil
+	return &result, nil
 }
 
 // Winner returns "radiant" or "dire" based on the match result.

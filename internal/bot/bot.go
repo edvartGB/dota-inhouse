@@ -25,6 +25,8 @@ type Bot struct {
 	dota2Client *dota2.Dota2
 	loggedIn    bool
 	busy        bool
+	gcReady     bool
+	gcReadyCh   chan struct{}
 	ctx         context.Context
 	cancel      context.CancelFunc
 	mu          sync.Mutex
@@ -52,8 +54,9 @@ func NewBot(username, password string) *Bot {
 	})
 
 	bot := &Bot{
-		name:   username,
-		client: steam.NewClient(),
+		name:      username,
+		client:    steam.NewClient(),
+		gcReadyCh: make(chan struct{}),
 	}
 
 	loginInfo := &steam.LogOnDetails{
@@ -98,6 +101,7 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, timeout time.Durat
 		b.client = steam.NewClient()
 		b.loggedIn = false
 		b.dota2Client = nil
+		b.markDotaGCNotReadyLocked()
 		b.mu.Unlock()
 	}
 }
@@ -228,6 +232,7 @@ func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) boo
 		b.loggedIn = false
 		dotaClient := b.dota2Client
 		b.dota2Client = nil
+		b.markDotaGCNotReadyLocked()
 		b.mu.Unlock()
 		if dotaClient != nil {
 			dotaClient.SetPlaying(false)
@@ -235,6 +240,22 @@ func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) boo
 		}
 		// Exit the event loop so connectWithRetry can establish a fresh connection.
 		return true
+
+	case *devents.ClientWelcomed:
+		log.Printf("[%s] Dota GC session ready", b.name)
+		b.mu.Lock()
+		b.markDotaGCReadyLocked()
+		b.mu.Unlock()
+		return false
+
+	case *devents.GCConnectionStatusChanged:
+		log.Printf("[%s] Dota GC connection status changed: %v -> %v", b.name, e.OldState, e.NewState)
+		if e.NewState != protocol.GCConnectionStatus_GCConnectionStatus_HAVE_SESSION {
+			b.mu.Lock()
+			b.markDotaGCNotReadyLocked()
+			b.mu.Unlock()
+		}
+		return false
 
 	case *devents.UnhandledGCPacket:
 		b.handleUnhandledGCPacket(e)
@@ -246,6 +267,25 @@ func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) boo
 	}
 
 	return false
+}
+
+func (b *Bot) markDotaGCReadyLocked() {
+	if b.gcReady {
+		return
+	}
+	b.gcReady = true
+	close(b.gcReadyCh)
+}
+
+func (b *Bot) markDotaGCNotReadyLocked() {
+	if b.gcReadyCh == nil {
+		b.gcReadyCh = make(chan struct{})
+	}
+	if !b.gcReady {
+		return
+	}
+	b.gcReady = false
+	b.gcReadyCh = make(chan struct{})
 }
 
 func (b *Bot) handleUnhandledGCPacket(event *devents.UnhandledGCPacket) {
@@ -328,6 +368,9 @@ func (b *Bot) Status() Status {
 
 const (
 	LobbyJoinTimeout         = 5 * time.Minute
+	DotaGCReadyTimeout       = 15 * time.Second
+	LobbyCreationTimeout     = 15 * time.Second
+	LobbyDestroyTimeout      = 5 * time.Second
 	LobbyRelaunchDelay       = 3 * time.Second
 	MaxLobbyRelaunchAttempts = 2
 )
@@ -379,15 +422,18 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 		dotaClient = dota2.New(b.client, logger)
 		b.mu.Lock()
 		b.dota2Client = dotaClient
+		b.markDotaGCNotReadyLocked()
 		b.mu.Unlock()
-		dotaClient.SetPlaying(true)
-		time.Sleep(time.Second)
-		dotaClient.SayHello()
-		time.Sleep(3 * time.Second)
 	} else {
 		log.Printf("[%s] Reusing existing Dota 2 client", b.name)
-		dotaClient.SetPlaying(true)
-		dotaClient.SayHello()
+	}
+
+	if err := b.waitForDotaGCReady(ctx, sessionCtx, dotaClient); err != nil {
+		log.Printf("[%s] Cannot create lobby: Dota GC not ready: %v", b.name, err)
+		if ctx.Err() == nil && sessionCtx.Err() == nil {
+			b.reconnectAfterDotaFailure(dotaClient, "Dota GC readiness failure")
+		}
+		return false
 	}
 
 	log.Printf("[%s] Creating lobby for match %s", b.name, matchID)
@@ -406,7 +452,20 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 	if leagueID > 0 {
 		lobbyDetails.Leagueid = proto.Uint32(leagueID)
 	}
-	dotaClient.LeaveCreateLobby(sessionCtx, lobbyDetails, true)
+
+	creationCtx, creationCancel := context.WithTimeout(ctx, LobbyCreationTimeout)
+	defer creationCancel()
+	stopCreationOnSessionEnd := cancelWhenDone(creationCancel, sessionCtx)
+	err := dotaClient.LeaveCreateLobby(creationCtx, lobbyDetails, true)
+	stopCreationOnSessionEnd()
+	if err != nil {
+		log.Printf("[%s] Failed to create lobby for match %s within %v: %v", b.name, matchID, LobbyCreationTimeout, err)
+		b.destroyLobbyWithTimeout(sessionCtx, dotaClient, "failed lobby creation")
+		if ctx.Err() == nil && sessionCtx.Err() == nil {
+			b.reconnectAfterDotaFailure(dotaClient, "failed lobby creation")
+		}
+		return false
+	}
 
 	log.Printf("[%s] Moving bot to unassigned pool", b.name)
 	dotaClient.JoinLobbyTeam(protocol.DOTA_GC_TEAM_DOTA_GC_TEAM_PLAYER_POOL, 1)
@@ -429,16 +488,104 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 	return true
 }
 
+func (b *Bot) waitForDotaGCReady(ctx context.Context, sessionCtx context.Context, dotaClient *dota2.Dota2) error {
+	b.mu.Lock()
+	if b.gcReady {
+		b.mu.Unlock()
+		return nil
+	}
+	readyCh := b.gcReadyCh
+	b.mu.Unlock()
+
+	log.Printf("[%s] Waiting for Dota GC session", b.name)
+	dotaClient.SetPlaying(true)
+	dotaClient.SayHello()
+
+	timeout := time.NewTimer(DotaGCReadyTimeout)
+	defer timeout.Stop()
+
+	retryHello := time.NewTicker(5 * time.Second)
+	defer retryHello.Stop()
+
+	for {
+		select {
+		case <-readyCh:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-sessionCtx.Done():
+			return sessionCtx.Err()
+		case <-timeout.C:
+			return fmt.Errorf("timed out after %v", DotaGCReadyTimeout)
+		case <-retryHello.C:
+			log.Printf("[%s] Still waiting for Dota GC session, sending hello again", b.name)
+			dotaClient.SetPlaying(true)
+			dotaClient.SayHello()
+		}
+	}
+}
+
+func cancelWhenDone(cancel context.CancelFunc, watched context.Context) context.CancelFunc {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-watched.Done():
+			cancel()
+		case <-done:
+		}
+	}()
+	return func() {
+		close(done)
+	}
+}
+
+func (b *Bot) destroyLobbyWithTimeout(sessionCtx context.Context, dotaClient *dota2.Dota2, reason string) {
+	destroyCtx, destroyCancel := context.WithTimeout(context.Background(), LobbyDestroyTimeout)
+	defer destroyCancel()
+	stopDestroyOnSessionEnd := cancelWhenDone(destroyCancel, sessionCtx)
+	defer stopDestroyOnSessionEnd()
+
+	if _, err := dotaClient.DestroyLobby(destroyCtx); err != nil {
+		log.Printf("[%s] Failed to destroy lobby after %s: %v", b.name, reason, err)
+		return
+	}
+	log.Printf("[%s] Destroyed lobby after %s", b.name, reason)
+}
+
+func (b *Bot) reconnectAfterDotaFailure(dotaClient *dota2.Dota2, reason string) {
+	b.mu.Lock()
+	client := b.client
+	if b.dota2Client == dotaClient {
+		b.dota2Client = nil
+	}
+	b.loggedIn = false
+	b.markDotaGCNotReadyLocked()
+	b.mu.Unlock()
+
+	log.Printf("[%s] Reconnecting Steam client after %s to reset Dota GC state", b.name, reason)
+
+	if dotaClient != nil {
+		dotaClient.SetPlaying(false)
+		dotaClient.Close()
+	}
+	if client != nil {
+		client.Disconnect()
+	}
+}
+
 func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context, dotaClient *dota2.Dota2, matchID string, expectedRadiant []coordinator.Player, expectedDire []coordinator.Player, commands chan<- coordinator.Command) {
 	eventCh, eventCancel, err := dotaClient.GetCache().SubscribeType(cso.Lobby)
 	if err != nil {
 		log.Printf("[%s] Failed to subscribe to lobby events: %v", b.name, err)
 		// Clean up the lobby we created
-		dotaClient.DestroyLobby(sessionCtx)
+		b.destroyLobbyWithTimeout(sessionCtx, dotaClient, "lobby event subscription failure")
 		// Notify coordinator that lobby failed (no players joined)
 		commands <- coordinator.BotLobbyTimeout{
 			MatchID:            matchID,
 			PlayersJoinedRight: []string{},
+		}
+		if ctx.Err() == nil && sessionCtx.Err() == nil {
+			b.reconnectAfterDotaFailure(dotaClient, "lobby event subscription failure")
 		}
 		return
 	}
@@ -497,7 +644,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 					MatchID:            matchID,
 					PlayersJoinedRight: joinedCorrectly,
 				}
-				dotaClient.DestroyLobby(sessionCtx)
+				b.destroyLobbyWithTimeout(sessionCtx, dotaClient, "lobby join timeout")
 				return
 			}
 
@@ -560,7 +707,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 							MatchID:     matchID,
 							DotaMatchID: dotaMatchID,
 						}
-						dotaClient.DestroyLobby(sessionCtx)
+						b.destroyLobbyWithTimeout(sessionCtx, dotaClient, "game ended")
 					})
 					return
 
