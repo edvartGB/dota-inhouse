@@ -62,7 +62,7 @@
                     <tbody>
                         {{range .Users}}
                         <tr>
-                            <td>{{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" style="width:24px;height:24px;border-radius:4px;vertical-align:middle;margin-right:0.5rem;">{{end}}{{.Name}}</td>
+                            <td>{{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" loading="lazy" decoding="async" style="width:24px;height:24px;border-radius:4px;vertical-align:middle;margin-right:0.5rem;">{{end}}{{.Name}}</td>
                             <td><code>{{.SteamID}}</code></td>
                             <td>
                                 {{$cp := .CaptainPriority}}

@@ -76,12 +76,7 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticFS)))
 	r.Handle("/static/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Disable browser caching for JS/CSS during active development.
-		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
-			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-			w.Header().Set("Pragma", "no-cache")
-			w.Header().Set("Expires", "0")
-		}
+		w.Header().Set("Cache-Control", "public, max-age=3600")
 		staticHandler.ServeHTTP(w, r)
 	}))
 
@@ -93,9 +88,7 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		}
 
 		w.Header().Set("Content-Type", "application/javascript")
-		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		w.Header().Set("Pragma", "no-cache")
-		w.Header().Set("Expires", "0")
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(data)
 	})
 
@@ -173,7 +166,7 @@ func (s *Server) StartSSE(events <-chan coordinator.Event) {
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	user, _ := s.sessions.GetUser(r.Context(), r)
 
-	queue, matches, _, queueOpen := s.coordinator.GetState()
+	queue, matches, lobbySettings, queueOpen := s.coordinator.GetState()
 
 	matchList := make([]*coordinator.Match, 0, len(matches))
 	for _, m := range matches {
@@ -181,13 +174,15 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := PageData{
-		User:      user,
-		Queue:     queue,
-		Matches:   matchList,
-		QueueOpen: queueOpen,
+		User:         user,
+		Queue:        queue,
+		Matches:      matchList,
+		QueueOpen:    queueOpen,
+		GameModeName: gameModeName(lobbySettings.GameMode),
 	}
 
 	if user != nil {
+		data.IsAdmin = s.adminConfig.IsAdmin(user.SteamID)
 		for _, p := range queue {
 			if p.SteamID == user.SteamID {
 				data.InQueue = true
@@ -205,13 +200,15 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 type PageData struct {
-	User      interface{}
-	Queue     []coordinator.Player
-	Match     *coordinator.Match
-	Matches   []*coordinator.Match
-	InQueue   bool
-	InMatch   bool
-	QueueOpen bool
+	User         interface{}
+	Queue        []coordinator.Player
+	Match        *coordinator.Match
+	Matches      []*coordinator.Match
+	InQueue      bool
+	InMatch      bool
+	QueueOpen    bool
+	GameModeName string
+	IsAdmin      bool
 }
 
 type HistoryPageData struct {
@@ -295,6 +292,7 @@ type LeaderboardPageData struct {
 	Preset     string
 	SortBy     string
 	SortDir    string
+	IsAdmin    bool
 }
 
 func sanitizeLeaderboardSort(sortBy, sortDir string) (string, string) {
@@ -432,6 +430,11 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 	sortLeaderboardEntries(entries, sortBy, sortDir)
 
+	isAdmin := false
+	if user != nil {
+		isAdmin = s.adminConfig.IsAdmin(user.SteamID)
+	}
+
 	data := LeaderboardPageData{
 		User:       user,
 		Entries:    entries,
@@ -441,6 +444,7 @@ func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		Preset:     preset,
 		SortBy:     sortBy,
 		SortDir:    sortDir,
+		IsAdmin:    isAdmin,
 	}
 
 	if r.Header.Get("HX-Request") == "true" {

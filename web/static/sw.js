@@ -1,77 +1,22 @@
-const CACHE_NAME = 'dota-inhouse-v1';
-const STATIC_CACHE = 'dota-inhouse-static-v1';
-
-// Files to cache for offline support
-const STATIC_FILES = [
-    '/',
-    '/static/favicon.ico',
-    '/static/faceit_trumpet.mp3',
-    '/manifest.json'
+const OLD_CACHES = [
+    'dota-inhouse-v1',
+    'dota-inhouse-static-v1'
 ];
 
-// Install event - cache static files
 self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(STATIC_CACHE)
-            .then(cache => cache.addAll(STATIC_FILES))
-            .then(() => self.skipWaiting())
-            .catch(err => console.log('Cache install failed:', err))
-    );
+    self.skipWaiting();
 });
 
-// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys()
-            .then(cacheNames => {
-                return Promise.all(
-                    cacheNames
-                        .filter(name => name !== CACHE_NAME && name !== STATIC_CACHE)
-                        .map(name => caches.delete(name))
-                );
-            })
+            .then(cacheNames => Promise.all(
+                cacheNames
+                    .filter(name => OLD_CACHES.includes(name))
+                    .map(name => caches.delete(name))
+            ))
             .then(() => self.clients.claim())
     );
-});
-
-// Fetch event - serve from cache, fallback to network
-self.addEventListener('fetch', (event) => {
-    // Skip non-GET requests
-    if (event.request.method !== 'GET') return;
-
-    // Skip SSE connections
-    if (event.request.url.includes('/events')) return;
-
-    // Network first for API calls, cache first for static assets
-    if (event.request.url.includes('/static/')) {
-        const url = new URL(event.request.url);
-        const isJsOrCss = url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
-
-        // Always fetch fresh JS/CSS; do not serve from service worker cache.
-        if (isJsOrCss) {
-            event.respondWith(fetch(event.request, { cache: 'no-store' }));
-            return;
-        }
-
-        // Cache first for static files
-        event.respondWith(
-            caches.match(event.request)
-                .then(response => response || fetch(event.request))
-        );
-    } else {
-        // Network first for HTML pages
-        event.respondWith(
-            fetch(event.request)
-                .then(response => {
-                    // Clone the response before caching
-                    const responseClone = response.clone();
-                    caches.open(CACHE_NAME)
-                        .then(cache => cache.put(event.request, responseClone));
-                    return response;
-                })
-                .catch(() => caches.match(event.request))
-        );
-    }
 });
 
 // Handle push events from server

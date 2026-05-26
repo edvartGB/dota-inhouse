@@ -122,6 +122,29 @@ main {
     gap: 0.75rem;
 }
 
+.queue-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin: -0.35rem 0 1rem;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    font-size: 0.85rem;
+}
+
+.queue-meta span {
+    color: var(--text-secondary);
+}
+
+.queue-meta strong {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: right;
+}
+
 .queue-status {
     font-size: 0.75rem;
     font-weight: 700;
@@ -809,6 +832,12 @@ main {
     color: var(--text-secondary);
     font-size: 0.85rem;
     margin-left: auto;
+    text-decoration: none;
+}
+
+.dota-match-id:hover {
+    color: var(--accent-primary);
+    text-decoration: underline;
 }
 
 .history-match .match-teams {

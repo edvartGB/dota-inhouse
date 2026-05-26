@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -19,8 +20,23 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	// SQLite permits only one writer at a time. Keeping one pooled connection
+	// avoids in-process write lock races between recorder, queue, and session writes.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+	pragmas := []struct {
+		name string
+		stmt string
+	}{
+		{name: "foreign keys", stmt: "PRAGMA foreign_keys = ON"},
+		{name: "busy timeout", stmt: "PRAGMA busy_timeout = 5000"},
+		{name: "WAL journal mode", stmt: "PRAGMA journal_mode = WAL"},
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma.stmt); err != nil {
+			return nil, fmt.Errorf("failed to configure SQLite %s: %w", pragma.name, err)
+		}
 	}
 
 	store := &SQLiteStore{db: db}
@@ -58,6 +74,7 @@ func (s *SQLiteStore) migrate() error {
 			winner TEXT,
 			duration INTEGER
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_matches_state_ended ON matches(state, ended_at DESC)`,
 		`CREATE TABLE IF NOT EXISTS match_players (
 			match_id TEXT NOT NULL REFERENCES matches(id),
 			steam_id TEXT NOT NULL REFERENCES users(steam_id),
@@ -66,6 +83,7 @@ func (s *SQLiteStore) migrate() error {
 			accepted INTEGER DEFAULT 0,
 			PRIMARY KEY (match_id, steam_id)
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_match_players_steam ON match_players(steam_id)`,
 		`CREATE TABLE IF NOT EXISTS push_subscriptions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			steam_id TEXT NOT NULL REFERENCES users(steam_id),
@@ -96,6 +114,40 @@ func (s *SQLiteStore) migrate() error {
 
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
+}
+
+func retrySQLiteBusy(ctx context.Context, fn func() error) error {
+	delays := []time.Duration{0, 100 * time.Millisecond, 250 * time.Millisecond, 500 * time.Millisecond, 1 * time.Second}
+	var lastErr error
+	for i, delay := range delays {
+		if delay > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		err := fn()
+		if err == nil {
+			return nil
+		}
+		if !isSQLiteBusy(err) || i == len(delays)-1 {
+			return err
+		}
+		lastErr = err
+	}
+	return lastErr
+}
+
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "sqlite_busy") ||
+		strings.Contains(message, "database is locked") ||
+		strings.Contains(message, "database table is locked")
 }
 
 func (s *SQLiteStore) GetUser(ctx context.Context, steamID string) (*User, error) {
@@ -228,6 +280,36 @@ func (s *SQLiteStore) CreateMatch(ctx context.Context, match *Match) error {
 		match.ID, match.DotaMatchID, match.State, match.StartedAt, match.EndedAt, match.Winner, match.Duration,
 	)
 	return err
+}
+
+func (s *SQLiteStore) CreateMatchWithPlayers(ctx context.Context, match *Match, players []MatchPlayer) error {
+	return retrySQLiteBusy(ctx, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO matches (id, dota_match_id, state, started_at, ended_at, winner, duration)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			match.ID, match.DotaMatchID, match.State, match.StartedAt, match.EndedAt, match.Winner, match.Duration,
+		); err != nil {
+			return err
+		}
+
+		for _, player := range players {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO match_players (match_id, steam_id, team, was_captain, accepted)
+				 VALUES (?, ?, ?, ?, ?)`,
+				player.MatchID, player.SteamID, player.Team, player.WasCaptain, player.Accepted,
+			); err != nil {
+				return err
+			}
+		}
+
+		return tx.Commit()
+	})
 }
 
 func (s *SQLiteStore) UpdateMatch(ctx context.Context, match *Match) error {
@@ -461,52 +543,66 @@ func (s *SQLiteStore) ListMatchesWithPlayersPage(ctx context.Context, limit, off
 }
 
 func (s *SQLiteStore) buildMatchesWithPlayers(ctx context.Context, matches []Match) ([]MatchWithPlayers, error) {
-	result := make([]MatchWithPlayers, 0, len(matches))
-	for _, m := range matches {
-		mwp := MatchWithPlayers{Match: m}
-
-		rows, err := s.db.QueryContext(ctx,
-			`SELECT mp.steam_id, u.name, u.avatar_url, mp.team, mp.was_captain
-			 FROM match_players mp
-			 LEFT JOIN users u ON mp.steam_id = u.steam_id
-			 WHERE mp.match_id = ?`, m.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		for rows.Next() {
-			var p MatchPlayerInfo
-			var name, avatar sql.NullString
-			if err := rows.Scan(&p.SteamID, &name, &avatar, &p.Team, &p.WasCaptain); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			p.Name = name.String
-			p.AvatarURL = avatar.String
-			if p.Name == "" {
-				p.Name = p.SteamID // Fallback to Steam ID if no name
-			}
-
-			if p.Team == "radiant" {
-				mwp.Radiant = append(mwp.Radiant, p)
-				if p.WasCaptain {
-					captain := p
-					mwp.RadiantCaptain = &captain
-				}
-			} else {
-				mwp.Dire = append(mwp.Dire, p)
-				if p.WasCaptain {
-					captain := p
-					mwp.DireCaptain = &captain
-				}
-			}
-		}
-		rows.Close()
-
-		result = append(result, mwp)
+	result := make([]MatchWithPlayers, len(matches))
+	if len(matches) == 0 {
+		return result, nil
 	}
 
-	return result, nil
+	matchIndex := make(map[string]int, len(matches))
+	placeholders := make([]string, len(matches))
+	args := make([]interface{}, len(matches))
+	for i, m := range matches {
+		result[i] = MatchWithPlayers{Match: m}
+		matchIndex[m.ID] = i
+		placeholders[i] = "?"
+		args[i] = m.ID
+	}
+
+	query := fmt.Sprintf(`SELECT mp.match_id, mp.steam_id, u.name, u.avatar_url, mp.team, mp.was_captain
+		 FROM match_players mp
+		 LEFT JOIN users u ON mp.steam_id = u.steam_id
+		 WHERE mp.match_id IN (%s)
+		 ORDER BY mp.match_id, mp.team DESC, mp.was_captain DESC`, strings.Join(placeholders, ","))
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var matchID string
+		var p MatchPlayerInfo
+		var name, avatar sql.NullString
+		if err := rows.Scan(&matchID, &p.SteamID, &name, &avatar, &p.Team, &p.WasCaptain); err != nil {
+			return nil, err
+		}
+		p.Name = name.String
+		p.AvatarURL = avatar.String
+		if p.Name == "" {
+			p.Name = p.SteamID
+		}
+
+		idx, ok := matchIndex[matchID]
+		if !ok {
+			continue
+		}
+		mwp := &result[idx]
+		if p.Team == "radiant" {
+			mwp.Radiant = append(mwp.Radiant, p)
+			if p.WasCaptain {
+				captain := p
+				mwp.RadiantCaptain = &captain
+			}
+		} else {
+			mwp.Dire = append(mwp.Dire, p)
+			if p.WasCaptain {
+				captain := p
+				mwp.DireCaptain = &captain
+			}
+		}
+	}
+
+	return result, rows.Err()
 }
 
 func (s *SQLiteStore) ListIncompleteMatchesWithPlayers(ctx context.Context, limit int) ([]MatchWithPlayers, error) {

@@ -12,6 +12,12 @@ type QueueUpdated struct {
 
 func (QueueUpdated) event() {}
 
+type LobbySettingsUpdated struct {
+	Settings LobbySettings
+}
+
+func (LobbySettingsUpdated) event() {}
+
 type MatchAcceptStarted struct {
 	MatchID  string
 	Players  []Player

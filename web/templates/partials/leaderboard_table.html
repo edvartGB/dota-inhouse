@@ -102,7 +102,7 @@
             <tr>
                 <td class="rank">{{add $i 1}}</td>
                 <td class="player">
-                    {{if $e.AvatarURL}}<img src="{{$e.AvatarURL}}" alt="" class="avatar-small">{{end}}
+                    {{if $e.AvatarURL}}<img src="{{$e.AvatarURL}}" alt="" class="avatar-small" loading="lazy" decoding="async">{{end}}
                     <span class="player-name">{{$e.Name}}</span>
                 </td>
                 <td class="stat wins">{{$e.Wins}}</td>

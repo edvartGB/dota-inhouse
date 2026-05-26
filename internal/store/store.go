@@ -60,6 +60,7 @@ type Store interface {
 	DeleteExpiredSessions(ctx context.Context) error
 
 	CreateMatch(ctx context.Context, match *Match) error
+	CreateMatchWithPlayers(ctx context.Context, match *Match, players []MatchPlayer) error
 	UpdateMatch(ctx context.Context, match *Match) error
 	GetMatch(ctx context.Context, matchID string) (*Match, error)
 

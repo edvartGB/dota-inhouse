@@ -16,6 +16,7 @@ type ProfilePageData struct {
 	User        interface{}
 	DisplayName string
 	Error       string
+	IsAdmin     bool
 }
 
 func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +30,7 @@ func (s *Server) handleProfilePage(w http.ResponseWriter, r *http.Request) {
 		User:        user,
 		DisplayName: user.Name,
 		Error:       r.URL.Query().Get("error"),
+		IsAdmin:     s.adminConfig.IsAdmin(user.SteamID),
 	}
 
 	if err := s.templates.ExecuteTemplate(w, "profile.html", data); err != nil {

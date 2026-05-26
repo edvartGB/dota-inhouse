@@ -42,7 +42,7 @@
     <ul class="accept-player-list">
         {{range .Players}}
         <li class="accept-player {{if index $.Accepted .SteamID}}accepted{{end}}">
-            {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small">{{end}}
+            {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small" loading="lazy" decoding="async">{{end}}
             <span>{{.Name}}</span>
             {{if index $.Accepted .SteamID}}<span class="accept-check">&#10003;</span>{{end}}
         </li>

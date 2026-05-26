@@ -184,6 +184,27 @@ setInterval(function() {
     });
 }, 1000);
 
+function isTypingTarget(target) {
+    if (!target) return false;
+    const tagName = target.tagName;
+    return target.isContentEditable
+        || tagName === "INPUT"
+        || tagName === "TEXTAREA"
+        || tagName === "SELECT";
+}
+
+document.addEventListener("keydown", function(event) {
+    const isAcceptKey = event.key === "Enter" || event.key === " " || event.key === "Spacebar";
+    if (!isAcceptKey || event.repeat || isTypingTarget(event.target)) return;
+
+    const acceptButton = document.getElementById("accept-btn");
+    const acceptDialog = document.getElementById("accept-dialog");
+    if (!acceptButton || !acceptDialog || !acceptDialog.contains(acceptButton) || acceptButton.disabled) return;
+
+    event.preventDefault();
+    acceptButton.click();
+});
+
 // Keep accept button latched after first successful click to avoid duplicate taps
 // while waiting for SSE UI update from server.
 document.body.addEventListener('htmx:beforeRequest', function(event) {

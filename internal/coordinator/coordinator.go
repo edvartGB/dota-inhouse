@@ -837,6 +837,7 @@ func (c *Coordinator) handleAdminSetLobbySettings(cmd AdminSetLobbySettings) err
 
 	c.state.LobbySettings = cmd.Settings
 	log.Printf("Admin updated lobby settings: game mode = %s, league_id = %d", cmd.Settings.GameMode, cmd.Settings.LeagueID)
+	c.emit(LobbySettingsUpdated{Settings: cmd.Settings})
 
 	return nil
 }

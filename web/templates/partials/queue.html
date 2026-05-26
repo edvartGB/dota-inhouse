@@ -6,11 +6,16 @@
             {{if .QueueOpen}}Open{{else}}Closed{{end}}
         </span>
     </h3>
+    <div class="queue-meta">
+        <span>Mode</span>
+        <strong>{{.GameModeName}}</strong>
+    </div>
+
     <ul class="player-list">
         {{range .Queue}}
             <li class="player">
                 {{if .AvatarURL}}
-                    <img src="{{.AvatarURL}}" alt="" class="avatar">
+                    <img src="{{.AvatarURL}}" alt="" class="avatar" loading="lazy" decoding="async">
                 {{else}}
                     <span class="avatar avatar-slot" aria-hidden="true"></span>
                 {{end}}
@@ -97,11 +102,16 @@
             {{if .QueueOpen}}Open{{else}}Closed{{end}}
         </span>
     </h3>
+    <div class="queue-meta">
+        <span>Mode</span>
+        <strong>{{.GameModeName}}</strong>
+    </div>
+
     <ul class="player-list">
         {{range .Queue}}
             <li class="player">
                 {{if .AvatarURL}}
-                    <img src="{{.AvatarURL}}" alt="" class="avatar">
+                    <img src="{{.AvatarURL}}" alt="" class="avatar" loading="lazy" decoding="async">
                 {{else}}
                     <span class="avatar avatar-slot" aria-hidden="true"></span>
                 {{end}}

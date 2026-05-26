@@ -93,22 +93,18 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 	var buf bytes.Buffer
 
 	switch e := event.(type) {
-	case coordinator.QueueUpdated:
-		inQueue := false
-		for _, p := range e.Queue {
-			if p.SteamID == userID {
-				inQueue = true
-				break
-			}
-		}
+	case coordinator.LobbySettingsUpdated:
+		queue, _, _, _ := h.coordinator.GetState()
 		inMatch := h.coordinator.GetPlayerMatch(userID) != nil
-		_, _, _, queueOpen := h.coordinator.GetState()
-		data := struct {
-			Queue     []coordinator.Player
-			InQueue   bool
-			InMatch   bool
-			QueueOpen bool
-		}{Queue: e.Queue, InQueue: inQueue, InMatch: inMatch, QueueOpen: queueOpen}
+		data := h.queuePanelData(queue, userID, inMatch)
+		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", data); err != nil {
+			log.Printf("Failed to render queue after lobby settings update: %v", err)
+			return ""
+		}
+
+	case coordinator.QueueUpdated:
+		inMatch := h.coordinator.GetPlayerMatch(userID) != nil
+		data := h.queuePanelData(e.Queue, userID, inMatch)
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", data); err != nil {
 			log.Printf("Failed to render queue: %v", err)
 			return ""
@@ -237,20 +233,8 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _, _, queueOpen := h.coordinator.GetState()
-			inQueue := false
-			for _, p := range queue {
-				if p.SteamID == userID {
-					inQueue = true
-					break
-				}
-			}
-			queueData := struct {
-				Queue     []coordinator.Player
-				InQueue   bool
-				InMatch   bool
-				QueueOpen bool
-			}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
+			queue, _, _, _ := h.coordinator.GetState()
+			queueData := h.queuePanelData(queue, userID, false)
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after draft cancelled: %v", err)
 			}
@@ -266,20 +250,8 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _, _, queueOpen := h.coordinator.GetState()
-			inQueue := false
-			for _, p := range queue {
-				if p.SteamID == userID {
-					inQueue = true
-					break
-				}
-			}
-			queueData := struct {
-				Queue     []coordinator.Player
-				InQueue   bool
-				InMatch   bool
-				QueueOpen bool
-			}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
+			queue, _, _, _ := h.coordinator.GetState()
+			queueData := h.queuePanelData(queue, userID, false)
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after lobby cancelled: %v", err)
 			}
@@ -312,20 +284,8 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			log.Printf("Failed to render match completed: %v", err)
 			return ""
 		}
-		queue, _, _, queueOpen := h.coordinator.GetState()
-		inQueue := false
-		for _, p := range queue {
-			if p.SteamID == userID {
-				inQueue = true
-				break
-			}
-		}
-		queueData := struct {
-			Queue     []coordinator.Player
-			InQueue   bool
-			InMatch   bool
-			QueueOpen bool
-		}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
+		queue, _, _, _ := h.coordinator.GetState()
+		queueData := h.queuePanelData(queue, userID, false)
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 			log.Printf("Failed to render queue after match completed: %v", err)
 		}
@@ -346,20 +306,8 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		if e.ReturnedToQueue {
-			queue, _, _, queueOpen := h.coordinator.GetState()
-			inQueue := false
-			for _, p := range queue {
-				if p.SteamID == userID {
-					inQueue = true
-					break
-				}
-			}
-			queueData := struct {
-				Queue     []coordinator.Player
-				InQueue   bool
-				InMatch   bool
-				QueueOpen bool
-			}{Queue: queue, InQueue: inQueue, InMatch: false, QueueOpen: queueOpen}
+			queue, _, _, _ := h.coordinator.GetState()
+			queueData := h.queuePanelData(queue, userID, false)
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after admin cancel: %v", err)
 			}
@@ -370,6 +318,32 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 	}
 
 	return buf.String()
+}
+
+type QueuePanelData struct {
+	Queue        []coordinator.Player
+	InQueue      bool
+	InMatch      bool
+	QueueOpen    bool
+	GameModeName string
+}
+
+func (h *SSEHub) queuePanelData(queue []coordinator.Player, userID string, inMatch bool) QueuePanelData {
+	_, _, lobbySettings, queueOpen := h.coordinator.GetState()
+	inQueue := false
+	for _, p := range queue {
+		if p.SteamID == userID {
+			inQueue = true
+			break
+		}
+	}
+	return QueuePanelData{
+		Queue:        queue,
+		InQueue:      inQueue,
+		InMatch:      inMatch,
+		QueueOpen:    queueOpen,
+		GameModeName: gameModeName(lobbySettings.GameMode),
+	}
 }
 
 type DraftData struct {
@@ -383,15 +357,7 @@ type DraftData struct {
 }
 
 func (h *SSEHub) renderInitialState(userID string) string {
-	queue, matches, _, queueOpen := h.coordinator.GetState()
-
-	inQueue := false
-	for _, p := range queue {
-		if p.SteamID == userID {
-			inQueue = true
-			break
-		}
-	}
+	queue, matches, _, _ := h.coordinator.GetState()
 
 	inMatch := h.coordinator.GetPlayerMatch(userID) != nil
 
@@ -402,12 +368,7 @@ func (h *SSEHub) renderInitialState(userID string) string {
 
 	var buf bytes.Buffer
 
-	queueData := struct {
-		Queue     []coordinator.Player
-		InQueue   bool
-		InMatch   bool
-		QueueOpen bool
-	}{Queue: queue, InQueue: inQueue, InMatch: inMatch, QueueOpen: queueOpen}
+	queueData := h.queuePanelData(queue, userID, inMatch)
 	if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 		log.Printf("Failed to render initial queue: %v", err)
 		return ""

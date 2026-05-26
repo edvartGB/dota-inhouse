@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leaderboard - Dota Inhouse</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/vendor/htmx.min.js"></script>
     <link rel="stylesheet" href="/static/styles.css?v=1">
 </head>
 <body>
@@ -16,6 +16,7 @@
             <a href="/history" class="nav-link">History</a>
             <a href="/leaderboard" class="nav-link nav-link-active">Leaderboard</a>
             <a href="/profile" class="nav-link">Profile</a>
+            {{if .IsAdmin}}<a href="/admin" class="nav-link">Admin</a>{{end}}
             {{if .User}}
                 <span class="user-info">{{.User.Name}}</span>
                 <a href="/auth/logout" class="btn btn-secondary">Logout</a>

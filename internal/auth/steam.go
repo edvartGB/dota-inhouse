@@ -34,7 +34,7 @@ type SteamAuth struct {
 type SteamUser struct {
 	SteamID     string `json:"steamid"`
 	PersonaName string `json:"personaname"`
-	AvatarURL   string `json:"avatarfull"`
+	AvatarURL   string `json:"avatarmedium"`
 }
 
 // NewSteamAuth creates a new Steam authentication handler.

@@ -9,6 +9,16 @@ import (
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 )
 
+func gameModeName(gameMode string) string {
+	if name, ok := coordinator.ValidGameModes[gameMode]; ok {
+		return name
+	}
+	if gameMode == "" {
+		return "Unknown"
+	}
+	return gameMode
+}
+
 // templateFuncs returns the common template functions.
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{

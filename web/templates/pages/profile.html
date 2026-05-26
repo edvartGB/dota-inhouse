@@ -15,6 +15,7 @@
             <a href="/history" class="nav-link">History</a>
             <a href="/leaderboard" class="nav-link">Leaderboard</a>
             <a href="/profile" class="nav-link nav-link-active">Profile</a>
+            {{if .IsAdmin}}<a href="/admin" class="nav-link">Admin</a>{{end}}
             {{if .User}}
                 <span class="user-info">{{.User.Name}}</span>
                 <a href="/auth/logout" class="btn btn-secondary">Logout</a>

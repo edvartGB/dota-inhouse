@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Match History - Dota Inhouse</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/vendor/htmx.min.js"></script>
     <link rel="stylesheet" href="/static/styles.css?v=1">
 </head>
 <body>
@@ -16,6 +16,7 @@
             <a href="/history" class="nav-link nav-link-active">History</a>
             <a href="/leaderboard" class="nav-link">Leaderboard</a>
             <a href="/profile" class="nav-link">Profile</a>
+            {{if .IsAdmin}}<a href="/admin" class="nav-link">Admin</a>{{end}}
             {{if .User}}
                 <span class="user-info">{{.User.Name}}</span>
                 <a href="/auth/logout" class="btn btn-secondary">Logout</a>
@@ -29,7 +30,6 @@
 <div class="container">
     <div class="history-header">
         <h2>Match History</h2>
-        <a href="/" class="btn btn-secondary">Back to Queue</a>
     </div>
 
     {{if .Matches}}
@@ -74,7 +74,7 @@
                     <span class="match-duration">{{$duration}}</span>
                 {{end}}
                 {{if .DotaMatchID}}
-                    <span class="dota-match-id">Match ID: {{.DotaMatchID}}</span>
+                    <a class="dota-match-id" href="https://www.opendota.com/matches/{{.DotaMatchID}}" target="_blank" rel="noopener noreferrer">Match ID: {{.DotaMatchID}}</a>
                 {{end}}
             </div>
 
@@ -84,7 +84,7 @@
                     <ul class="player-list">
                         {{range .Radiant}}
                             <li class="player {{if .WasCaptain}}captain{{end}}">
-                                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small">{{end}}
+                                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small" loading="lazy" decoding="async">{{end}}
                                 <span class="player-name">{{.Name}}</span>
                                 {{if .WasCaptain}}<span class="captain-badge">C</span>{{end}}
                             </li>
@@ -99,7 +99,7 @@
                     <ul class="player-list">
                         {{range .Dire}}
                             <li class="player {{if .WasCaptain}}captain{{end}}">
-                                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small">{{end}}
+                                {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small" loading="lazy" decoding="async">{{end}}
                                 <span class="player-name">{{.Name}}</span>
                                 {{if .WasCaptain}}<span class="captain-badge">C</span>{{end}}
                             </li>
