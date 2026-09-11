@@ -689,20 +689,13 @@ func selectCaptains(players []Player) [2]Player {
 
 // assignCaptainSides orders captains for drafting:
 // captains[0] becomes Radiant/first-pick, captains[1] becomes Dire/second-pick.
-// The lower numeric captain priority gets the advantage; equal priorities are randomized.
+// Side placement is random and does not affect captain selection priority.
 func assignCaptainSides(captains [2]Player) [2]Player {
 	if captains[0].SteamID == "" || captains[1].SteamID == "" {
 		return captains
 	}
 
-	if captains[0].CaptainPriority == captains[1].CaptainPriority {
-		if rand.Intn(2) == 0 {
-			return captains
-		}
-		return [2]Player{captains[1], captains[0]}
-	}
-
-	if captains[0].CaptainPriority < captains[1].CaptainPriority {
+	if rand.Intn(2) == 0 {
 		return captains
 	}
 
