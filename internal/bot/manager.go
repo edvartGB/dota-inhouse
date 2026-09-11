@@ -13,19 +13,23 @@ import (
 const (
 	// BotRetryInterval is how often to check for an available bot
 	BotRetryInterval = 5 * time.Second
+	// BotStartupInterval avoids authenticating every bot from one IP at once.
+	BotStartupInterval = 15 * time.Second
 )
 
 // Manager manages a pool of Steam bots.
 type Manager struct {
 	bots          []*Bot
 	commands      chan<- coordinator.Command
+	baseURL       string
 	mu            sync.Mutex
 	matchToBotCtx map[string]context.CancelFunc
 }
 
 // Config holds bot configuration.
 type Config struct {
-	Bots []BotCredentials
+	Bots    []BotCredentials
+	BaseURL string
 }
 
 // BotCredentials holds login credentials for a single bot.
@@ -39,12 +43,14 @@ func NewManager(cfg Config, commands chan<- coordinator.Command) *Manager {
 	m := &Manager{
 		bots:          make([]*Bot, 0, len(cfg.Bots)),
 		commands:      commands,
+		baseURL:       cfg.BaseURL,
 		matchToBotCtx: make(map[string]context.CancelFunc),
 	}
 
 	for _, cred := range cfg.Bots {
 		if cred.Username != "" && cred.Password != "" {
-			bot := NewBot(cred.Username, cred.Password)
+			initialDelay := time.Duration(len(m.bots)) * BotStartupInterval
+			bot := NewBot(cred.Username, cred.Password, initialDelay)
 			m.bots = append(m.bots, bot)
 			log.Printf("Bot initialized: %s", cred.Username)
 		}
@@ -72,6 +78,8 @@ func (m *Manager) Run(ctx context.Context, events <-chan coordinator.Event) {
 			switch e := event.(type) {
 			case coordinator.RequestBotLobby:
 				go m.handleLobbyRequest(ctx, e)
+			case coordinator.MatchAcceptStarted:
+				go m.handleMatchAcceptStarted(e)
 			case coordinator.MatchCancelled:
 				m.cancelMatch(e.MatchID)
 			case coordinator.MatchCancelledByAdmin:
@@ -83,6 +91,16 @@ func (m *Manager) Run(ctx context.Context, events <-chan coordinator.Event) {
 			}
 		}
 	}
+}
+
+func (m *Manager) handleMatchAcceptStarted(event coordinator.MatchAcceptStarted) {
+	bot := m.getLoggedInBot()
+	if bot == nil {
+		log.Printf("No logged-in bot available for Steam accept notifications for match %s", event.MatchID)
+		return
+	}
+
+	bot.NotifyMatchAccept(event.MatchID, event.Players, m.baseURL)
 }
 
 func (m *Manager) cancelMatch(matchID string) {
@@ -185,6 +203,20 @@ func (m *Manager) getAvailableBot(exclude map[*Bot]bool) *Bot {
 			continue
 		}
 		if bot.IsAvailable() {
+			return bot
+		}
+	}
+	return nil
+}
+
+func (m *Manager) getLoggedInBot() *Bot {
+	m.mu.Lock()
+	bots := make([]*Bot, len(m.bots))
+	copy(bots, m.bots)
+	m.mu.Unlock()
+
+	for _, bot := range bots {
+		if bot.IsLoggedIn() {
 			return bot
 		}
 	}

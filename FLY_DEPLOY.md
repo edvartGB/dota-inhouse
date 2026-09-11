@@ -65,6 +65,18 @@ fly status --app <app-name>
 fly logs --app <app-name>
 ```
 
+After the first deployment with a new Steam authentication client, watch the
+logs while the bots connect. Steam Guard may ask you to approve the
+`dota-inhouse` device in the Steam mobile app. The authentication attempt polls
+for that approval for a short time and reconnects if it expires.
+
+If the logs report `email_code` or `device_code` instead of
+`manual_confirmation`, that account requires a short-lived code that the
+current environment configuration does not collect interactively. Approve the
+device in Steam when that option is available; otherwise the bot credential
+configuration will need to be extended to supply the requested code or a
+pre-issued access token.
+
 ## Migrating existing data
 
 The app stores persistent files under `/data` on Fly:

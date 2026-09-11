@@ -185,7 +185,8 @@ func main() {
 		}()
 
 		botManager = bot.NewManager(bot.Config{
-			Bots: validCreds,
+			Bots:    validCreds,
+			BaseURL: baseURL,
 		}, botCommands)
 		botEvents = coord.Subscribe()
 	} else {

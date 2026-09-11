@@ -105,6 +105,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 	case coordinator.QueueUpdated:
 		inMatch := h.coordinator.GetPlayerMatch(userID) != nil
 		data := h.queuePanelData(e.Queue, userID, inMatch)
+		data.IncludeActions = e.ActionsForAll || containsString(e.ActionPlayerIDs, userID)
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", data); err != nil {
 			log.Printf("Failed to render queue: %v", err)
 			return ""
@@ -168,9 +169,11 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 
-		if err := h.templates.ExecuteTemplate(&buf, "accept-button", data); err != nil {
-			log.Printf("Failed to render accept button: %v", err)
-			return ""
+		if e.PlayerID == userID {
+			if err := h.templates.ExecuteTemplate(&buf, "accept-button", data); err != nil {
+				log.Printf("Failed to render accept button: %v", err)
+				return ""
+			}
 		}
 
 	case coordinator.DraftStarted:
@@ -235,6 +238,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
 			queue, _, _, _ := h.coordinator.GetState()
 			queueData := h.queuePanelData(queue, userID, false)
+			queueData.IncludeActions = true
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after draft cancelled: %v", err)
 			}
@@ -252,6 +256,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		if isUserInPlayers(userID, e.ReturnedToQueue) {
 			queue, _, _, _ := h.coordinator.GetState()
 			queueData := h.queuePanelData(queue, userID, false)
+			queueData.IncludeActions = true
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after lobby cancelled: %v", err)
 			}
@@ -276,6 +281,24 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 
+	case coordinator.MatchStarted:
+		if !isUserInPlayers(userID, e.Players) {
+			return ""
+		}
+		data := struct {
+			MatchID     string
+			DotaMatchID uint64
+			StartedAt   string
+		}{
+			MatchID:     e.MatchID,
+			DotaMatchID: e.DotaMatchID,
+			StartedAt:   e.StartedAt.Format(time.RFC3339),
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "match-in-progress", data); err != nil {
+			log.Printf("Failed to render match in progress: %v", err)
+			return ""
+		}
+
 	case coordinator.MatchCompleted:
 		if !isUserInPlayers(userID, e.Players) {
 			return ""
@@ -286,6 +309,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}
 		queue, _, _, _ := h.coordinator.GetState()
 		queueData := h.queuePanelData(queue, userID, false)
+		queueData.IncludeActions = true
 		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 			log.Printf("Failed to render queue after match completed: %v", err)
 		}
@@ -308,6 +332,7 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		if e.ReturnedToQueue {
 			queue, _, _, _ := h.coordinator.GetState()
 			queueData := h.queuePanelData(queue, userID, false)
+			queueData.IncludeActions = true
 			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 				log.Printf("Failed to render queue after admin cancel: %v", err)
 			}
@@ -321,11 +346,12 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 }
 
 type QueuePanelData struct {
-	Queue        []coordinator.Player
-	InQueue      bool
-	InMatch      bool
-	QueueOpen    bool
-	GameModeName string
+	Queue          []coordinator.Player
+	InQueue        bool
+	InMatch        bool
+	QueueOpen      bool
+	GameModeName   string
+	IncludeActions bool
 }
 
 func (h *SSEHub) queuePanelData(queue []coordinator.Player, userID string, inMatch bool) QueuePanelData {
@@ -369,6 +395,7 @@ func (h *SSEHub) renderInitialState(userID string) string {
 	var buf bytes.Buffer
 
 	queueData := h.queuePanelData(queue, userID, inMatch)
+	queueData.IncludeActions = true
 	if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
 		log.Printf("Failed to render initial queue: %v", err)
 		return ""
@@ -466,9 +493,13 @@ func (h *SSEHub) renderCurrentMatchArea(userID string) string {
 		data := struct {
 			MatchID     string
 			DotaMatchID uint64
+			StartedAt   string
 		}{
 			MatchID:     match.ID,
 			DotaMatchID: match.DotaMatchID,
+		}
+		if match.GameStartedAt != nil {
+			data.StartedAt = match.GameStartedAt.Format(time.RFC3339)
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "match-in-progress", data); err != nil {
 			log.Printf("Failed to render initial in-progress state: %v", err)
@@ -596,6 +627,18 @@ func isUserInMatch(userID string, players []coordinator.Player) bool {
 func isUserInPlayers(userID string, players []coordinator.Player) bool {
 	for _, p := range players {
 		if p.SteamID == userID {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, needle string) bool {
+	if needle == "" {
+		return false
+	}
+	for _, value := range values {
+		if value == needle {
 			return true
 		}
 	}

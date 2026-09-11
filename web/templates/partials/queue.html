@@ -1,17 +1,48 @@
 {{define "queue"}}
 <div id="queue" class="queue-panel" hx-swap-oob="true">
-    <h3>
+    {{template "queue-title" .}}
+    {{template "queue-meta" .}}
+    {{template "queue-player-list" .}}
+    <div id="queue-actions" class="queue-actions">
+        {{template "queue-actions-content" .}}
+    </div>
+</div>
+{{end}}
+
+{{define "queue-title"}}
+    <h3 id="queue-title">
         Queue ({{len .Queue}}/10)
         <span class="queue-status {{if .QueueOpen}}open{{else}}closed{{end}}">
             {{if .QueueOpen}}Open{{else}}Closed{{end}}
         </span>
     </h3>
-    <div class="queue-meta">
+{{end}}
+
+{{define "queue-title-sse"}}
+    <h3 id="queue-title" hx-swap-oob="true">
+        Queue ({{len .Queue}}/10)
+        <span class="queue-status {{if .QueueOpen}}open{{else}}closed{{end}}">
+            {{if .QueueOpen}}Open{{else}}Closed{{end}}
+        </span>
+    </h3>
+{{end}}
+
+{{define "queue-meta"}}
+    <div id="queue-meta" class="queue-meta">
         <span>Mode</span>
         <strong>{{.GameModeName}}</strong>
     </div>
+{{end}}
 
-    <ul class="player-list">
+{{define "queue-meta-sse"}}
+    <div id="queue-meta" class="queue-meta" hx-swap-oob="true">
+        <span>Mode</span>
+        <strong>{{.GameModeName}}</strong>
+    </div>
+{{end}}
+
+{{define "queue-player-list"}}
+    <ul id="queue-player-list" class="player-list">
         {{range .Queue}}
             <li class="player">
                 {{if .AvatarURL}}
@@ -19,7 +50,7 @@
                 {{else}}
                     <span class="avatar avatar-slot" aria-hidden="true"></span>
                 {{end}}
-                <span>{{.Name}}</span>
+                <span class="queue-player-name">{{.Name}}</span>
             </li>
         {{end}}
         {{$remaining := sub 10 (len .Queue)}}
@@ -30,28 +61,55 @@
             </li>
         {{end}}
     </ul>
+{{end}}
 
-    <div class="queue-actions">
-        {{if .InMatch}}
-            <button class="btn btn-secondary" disabled>In Match</button>
-        {{else}}
-            <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
-                hx-indicator="#join-btn" hx-disabled-elt="this"
-                {{if or .InQueue (not .QueueOpen)}}style="display:none;"{{end}}>
-                Join Queue
-            </button>
-            <button hx-post="/queue/leave" hx-swap="none" class="btn btn-danger" id="leave-btn"
-                hx-indicator="#leave-btn" hx-disabled-elt="this"
-                {{if not .InQueue}}style="display:none;"{{end}}>
-                Leave Queue
-            </button>
-            <button class="btn btn-secondary" disabled
-                {{if or .InQueue .QueueOpen}}style="display:none;"{{end}}>
-                Queue Closed
-            </button>
+{{define "queue-player-list-sse"}}
+    <ul id="queue-player-list" class="player-list" hx-swap-oob="true">
+        {{range .Queue}}
+            <li class="player">
+                {{if .AvatarURL}}
+                    <img src="{{.AvatarURL}}" alt="" class="avatar" loading="lazy" decoding="async">
+                {{else}}
+                    <span class="avatar avatar-slot" aria-hidden="true"></span>
+                {{end}}
+                <span class="queue-player-name">{{.Name}}</span>
+            </li>
         {{end}}
+        {{$remaining := sub 10 (len .Queue)}}
+        {{range iterate $remaining}}
+            <li class="player empty">
+                <span class="avatar avatar-slot" aria-hidden="true"></span>
+                <span class="queue-player-name">Empty slot</span>
+            </li>
+        {{end}}
+    </ul>
+{{end}}
+
+{{define "queue-actions-content"}}
+    {{if .InMatch}}
+        <button class="btn btn-secondary" disabled>In Match</button>
+    {{else}}
+        <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
+            hx-indicator="#join-btn" hx-disabled-elt="this"
+            {{if or .InQueue (not .QueueOpen)}}style="display:none;"{{end}}>
+            Join Queue
+        </button>
+        <button hx-post="/queue/leave" hx-swap="none" class="btn btn-danger" id="leave-btn"
+            hx-indicator="#leave-btn" hx-disabled-elt="this"
+            {{if not .InQueue}}style="display:none;"{{end}}>
+            Leave Queue
+        </button>
+        <button class="btn btn-secondary" disabled
+            {{if or .InQueue .QueueOpen}}style="display:none;"{{end}}>
+            Queue Closed
+        </button>
+    {{end}}
+{{end}}
+
+{{define "queue-actions-sse"}}
+    <div id="queue-actions" class="queue-actions" hx-swap-oob="true">
+        {{template "queue-actions-content" .}}
     </div>
-</div>
 {{end}}
 
 {{define "active-matches"}}
@@ -64,6 +122,11 @@
             {{range .Matches}}
                 <li class="match-item {{.State | matchStateClass}}">
                     <span class="match-status-badge">{{.State | matchStateName}}</span>
+                    {{if and (eq .State 3) .GameStartedAt}}
+                        <span class="match-elapsed">
+                            In game <span class="elapsed-time" data-started-at="{{.GameStartedAt.Format "2006-01-02T15:04:05Z07:00"}}">0m</span>
+                        </span>
+                    {{end}}
                     <div class="match-teams active-match-teams">
                         <div class="active-match-team active-match-team-radiant">
                             <h4>Radiant</h4>
@@ -95,57 +158,8 @@
 {{end}}
 
 {{define "queue-sse"}}
-<div id="queue" class="queue-panel" hx-swap-oob="true" data-max-players="10">
-    <h3>
-        Queue ({{len .Queue}}/10)
-        <span class="queue-status {{if .QueueOpen}}open{{else}}closed{{end}}">
-            {{if .QueueOpen}}Open{{else}}Closed{{end}}
-        </span>
-    </h3>
-    <div class="queue-meta">
-        <span>Mode</span>
-        <strong>{{.GameModeName}}</strong>
-    </div>
-
-    <ul class="player-list">
-        {{range .Queue}}
-            <li class="player">
-                {{if .AvatarURL}}
-                    <img src="{{.AvatarURL}}" alt="" class="avatar" loading="lazy" decoding="async">
-                {{else}}
-                    <span class="avatar avatar-slot" aria-hidden="true"></span>
-                {{end}}
-                <span>{{.Name}}</span>
-            </li>
-        {{end}}
-        {{$remaining := sub 10 (len .Queue)}}
-        {{range iterate $remaining}}
-            <li class="player empty">
-                <span class="avatar avatar-slot" aria-hidden="true"></span>
-                <span>Empty slot</span>
-            </li>
-        {{end}}
-    </ul>
-
-    <div class="queue-actions">
-        {{if .InMatch}}
-            <button class="btn btn-secondary" disabled>In Match</button>
-        {{else}}
-            <button hx-post="/queue/join" hx-swap="none" class="btn btn-primary" id="join-btn"
-                hx-indicator="#join-btn" hx-disabled-elt="this"
-                {{if or .InQueue (not .QueueOpen)}}style="display:none;"{{end}}>
-                Join Queue
-            </button>
-            <button hx-post="/queue/leave" hx-swap="none" class="btn btn-danger" id="leave-btn"
-                hx-indicator="#leave-btn" hx-disabled-elt="this"
-                {{if not .InQueue}}style="display:none;"{{end}}>
-                Leave Queue
-            </button>
-            <button class="btn btn-secondary" disabled
-                {{if or .InQueue .QueueOpen}}style="display:none;"{{end}}>
-                Queue Closed
-            </button>
-        {{end}}
-    </div>
-</div>
+{{template "queue-title-sse" .}}
+{{template "queue-meta-sse" .}}
+{{template "queue-player-list-sse" .}}
+{{if .IncludeActions}}{{template "queue-actions-sse" .}}{{end}}
 {{end}}

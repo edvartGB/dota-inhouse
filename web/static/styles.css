@@ -181,6 +181,13 @@ main {
     height: 40px;
 }
 
+.queue-player-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .player-list .player.empty {
     color: var(--text-secondary);
     font-style: italic;
@@ -200,6 +207,7 @@ main {
 
 .queue-actions {
     margin-top: 1rem;
+    min-height: 36px;
 }
 
 .queue-actions .btn {
@@ -260,6 +268,20 @@ main {
     text-transform: uppercase;
     margin-bottom: 0.5rem;
     background: var(--bg-primary);
+}
+
+.match-elapsed {
+    display: inline-block;
+    margin-left: 0.4rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.match-elapsed-large {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
 }
 
 .match-teams {
@@ -532,12 +554,20 @@ main {
     display: flex;
     align-items: center;
     gap: 0.4rem;
+    min-width: 0;
     padding: 0.3rem 0.5rem;
     border-radius: 4px;
     font-size: 0.85rem;
     color: var(--text-secondary);
     opacity: 0.5;
     transition: opacity 0.3s;
+}
+
+.accept-player-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .accept-player.accepted {

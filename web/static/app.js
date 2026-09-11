@@ -29,10 +29,17 @@ document.body.addEventListener('htmx:load', function(event) {
     }
 });
 
-const notificationAudio = new Audio('/static/faceit_trumpet.mp3');
-notificationAudio.load();
-notificationAudio.volume = 0.7;
-notificationAudio.preload = 'auto';
+let notificationAudio;
+
+function getNotificationAudio() {
+    if (!notificationAudio) {
+        notificationAudio = new Audio();
+        notificationAudio.preload = 'none';
+        notificationAudio.src = '/static/faceit_trumpet.mp3';
+        notificationAudio.volume = 0.7;
+    }
+    return notificationAudio;
+}
 
 
 function requestNotificationPermission() {
@@ -54,9 +61,10 @@ function requestNotificationPermission() {
 }
 
 function playNotificationSound() {
-    notificationAudio.currentTime = 0;
+    const audio = getNotificationAudio();
+    audio.currentTime = 0;
     console.log("Playing notification sound");
-    notificationAudio.play().catch(e => {
+    audio.play().catch(e => {
         console.warn("Audio play failed:", e);
     });
 }
@@ -69,7 +77,66 @@ function triggerMatchFoundNotification(source) {
 
 // Push notification subscription
 
+const PUSH_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let pushSubscriptionCheckStarted = false;
+
+function isLoggedIn() {
+    return !!document.querySelector('.user-info');
+}
+
+function pushSubscriptionFingerprint(subscription) {
+    const data = subscription.toJSON();
+    return JSON.stringify({
+        endpoint: data.endpoint,
+        p256dh: data.keys && data.keys.p256dh,
+        auth: data.keys && data.keys.auth
+    });
+}
+
+function getLocalStorageItem(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch (error) {
+        console.warn('Unable to read localStorage:', error);
+        return null;
+    }
+}
+
+function setLocalStorageItem(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (error) {
+        console.warn('Unable to write localStorage:', error);
+    }
+}
+
+function removeLocalStorageItem(key) {
+    try {
+        localStorage.removeItem(key);
+    } catch (error) {
+        console.warn('Unable to remove localStorage item:', error);
+    }
+}
+
+function shouldSyncPushSubscription(subscription) {
+    const fingerprint = pushSubscriptionFingerprint(subscription);
+    const lastFingerprint = getLocalStorageItem('pushSubscriptionFingerprint');
+    const lastSyncAt = Number(getLocalStorageItem('pushSubscriptionSyncedAt') || 0);
+
+    return fingerprint !== lastFingerprint || Date.now() - lastSyncAt > PUSH_SYNC_INTERVAL_MS;
+}
+
+function markPushSubscriptionSynced(subscription) {
+    setLocalStorageItem('pushSubscriptionFingerprint', pushSubscriptionFingerprint(subscription));
+    setLocalStorageItem('pushSubscriptionSyncedAt', String(Date.now()));
+}
+
 async function subscribeToPush() {
+    if (!isLoggedIn()) {
+        console.log('Skipping push subscription sync while logged out');
+        return;
+    }
+
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         console.log('Push notifications not supported');
         return;
@@ -105,21 +172,31 @@ async function subscribeToPush() {
             console.log('Existing push subscription found:', subscription.endpoint.substring(0, 50) + '...');
         }
 
-        // Always send/update subscription to server to ensure it's current
-        await sendSubscriptionToServer(subscription);
-
-        // Set up periodic subscription check (every 5 minutes)
-        setInterval(async () => {
-            try {
-                const currentSub = await registration.pushManager.getSubscription();
-                if (!currentSub) {
-                    console.warn('Push subscription lost, re-subscribing...');
-                    await subscribeToPush();
-                }
-            } catch (err) {
-                console.error('Error checking push subscription:', err);
+        if (shouldSyncPushSubscription(subscription)) {
+            const synced = await sendSubscriptionToServer(subscription);
+            if (synced) {
+                markPushSubscriptionSynced(subscription);
             }
-        }, 5 * 60 * 1000);
+        } else {
+            console.log('Push subscription already synced recently');
+        }
+
+        if (!pushSubscriptionCheckStarted) {
+            pushSubscriptionCheckStarted = true;
+            setInterval(async () => {
+                try {
+                    const currentSub = await registration.pushManager.getSubscription();
+                    if (!currentSub) {
+                        console.warn('Push subscription lost, re-subscribing...');
+                        removeLocalStorageItem('pushSubscriptionFingerprint');
+                        removeLocalStorageItem('pushSubscriptionSyncedAt');
+                        await subscribeToPush();
+                    }
+                } catch (err) {
+                    console.error('Error checking push subscription:', err);
+                }
+            }, 5 * 60 * 1000);
+        }
 
     } catch (error) {
         console.error('Failed to subscribe to push:', error);
@@ -174,6 +251,27 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
+function formatElapsedDuration(totalSeconds) {
+    totalSeconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+    if (hours > 0) {
+        return hours + 'h ' + String(minutes).padStart(2, '0') + 'm';
+    }
+    return minutes + 'm';
+}
+
+function updateElapsedTimes() {
+    document.querySelectorAll('.elapsed-time[data-started-at]').forEach(function(el) {
+        const startedAt = new Date(el.dataset.startedAt).getTime();
+        if (Number.isNaN(startedAt)) return;
+
+        const elapsedSeconds = (Date.now() - startedAt) / 1000;
+        el.textContent = formatElapsedDuration(elapsedSeconds);
+    });
+}
+
 setInterval(function() {
     document.querySelectorAll('.countdown[data-deadline]').forEach(function(el) {
         var remaining = Math.max(0, Math.floor((new Date(el.dataset.deadline) - Date.now()) / 1000));
@@ -182,7 +280,10 @@ setInterval(function() {
         el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
         el.classList.toggle('countdown-urgent', remaining <= 10);
     });
+    updateElapsedTimes();
 }, 1000);
+
+updateElapsedTimes();
 
 function isTypingTarget(target) {
     if (!target) return false;
