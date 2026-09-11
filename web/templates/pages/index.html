@@ -55,15 +55,17 @@
                             </div>
                         </div>
                     {{else if eq .Match.State 1}}
-                        {{template "draft-page" .}}
+                        {{template "side-choice-panel" (sideChoiceData .Match .User.SteamID)}}
                     {{else if eq .Match.State 2}}
+                        {{template "draft-page" .}}
+                    {{else if eq .Match.State 3}}
                         <div class="match-status">
                             <h3>Waiting for Dota 2 lobby...</h3>
-                            <div class="countdown" data-deadline="{{.Match.LobbyDeadline.Format "2006-01-02T15:04:05Z07:00"}}"></div>
+                            <div class="countdown" data-deadline="{{.Match.LobbyDeadline.Format "2006-01-02T15:04:05Z07:00"}}" {{if .Match.LobbyPaused}}data-paused="true" data-remaining-seconds="{{remainingSeconds .Match.LobbyRemaining}}"{{end}}></div>
                             <div class="spinner"></div>
                             <p>The bot is creating your Dota 2 lobby. You will receive an invite shortly.</p>
                         </div>
-                    {{else if eq .Match.State 3}}
+                    {{else if eq .Match.State 4}}
                         <div class="match-status">
                             <h3>Match in Progress</h3>
                             {{if .Match.GameStartedAt}}

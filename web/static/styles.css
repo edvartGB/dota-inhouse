@@ -251,6 +251,10 @@ main {
     border-left-color: var(--accent-primary);
 }
 
+.match-item.state-choosing {
+    border-left: 4px solid var(--accent-primary);
+}
+
 .match-item.state-waiting {
     border-left-color: #5bc0de;
 }
@@ -1264,4 +1268,17 @@ main {
         padding: 0.75rem;
     }
 
+}
+
+.side-choice-btn {
+    display: block;
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+.side-choice-status {
+    margin-top: 0.75rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-align: center;
 }

@@ -75,12 +75,16 @@ func (h *SSEHub) isMatchEvent(event coordinator.Event) bool {
 	switch event.(type) {
 	case coordinator.MatchAcceptStarted,
 		coordinator.MatchAcceptUpdated,
+		coordinator.SideChoiceStarted,
+		coordinator.SideChoiceUpdated,
 		coordinator.DraftStarted,
 		coordinator.DraftUpdated,
 		coordinator.MatchCancelled,
 		coordinator.DraftCancelled,
 		coordinator.LobbyCancelled,
 		coordinator.RequestBotLobby,
+		coordinator.LobbyCountdownPaused,
+		coordinator.LobbyCountdownResumed,
 		coordinator.MatchStarted,
 		coordinator.MatchCompleted:
 		return true
@@ -176,6 +180,40 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			}
 		}
 
+	case coordinator.SideChoiceStarted:
+		if !isUserInPlayers(userID, e.Players) {
+			return ""
+		}
+		data := SideChoiceData{
+			MatchID:          e.MatchID,
+			Captains:         e.Captains,
+			SideChooserIndex: e.SideChooserIndex,
+			AvailablePlayers: e.Available,
+			Deadline:         e.Deadline.Format(time.RFC3339),
+			UserID:           userID,
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "side-choice", data); err != nil {
+			log.Printf("Failed to render side choice: %v", err)
+			return ""
+		}
+
+	case coordinator.SideChoiceUpdated:
+		if !isUserInPlayers(userID, e.Players) {
+			return ""
+		}
+		data := SideChoiceData{
+			MatchID:          e.MatchID,
+			Captains:         e.Captains,
+			SideChooserIndex: e.SideChooserIndex,
+			AvailablePlayers: e.Available,
+			Deadline:         e.Deadline.Format(time.RFC3339),
+			UserID:           userID,
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "side-choice", data); err != nil {
+			log.Printf("Failed to render side choice update: %v", err)
+			return ""
+		}
+
 	case coordinator.DraftStarted:
 		// Only send to users in this match
 		if !isUserInPlayers(userID, e.Radiant) && !isUserInPlayers(userID, e.Dire) && !isUserInPlayers(userID, e.Available) {
@@ -268,9 +306,11 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			return ""
 		}
 		data := struct {
-			MatchID  string
-			Message  string
-			Deadline string
+			MatchID          string
+			Message          string
+			Deadline         string
+			Paused           bool
+			RemainingSeconds int
 		}{
 			MatchID:  e.MatchID,
 			Message:  "Waiting for Dota 2 lobby...",
@@ -278,6 +318,52 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
 			log.Printf("Failed to render waiting: %v", err)
+			return ""
+		}
+
+	case coordinator.LobbyCountdownPaused:
+		if !isUserInPlayers(userID, e.Players) {
+			return ""
+		}
+		remainingSeconds := int(e.Remaining.Seconds())
+		if remainingSeconds < 0 {
+			remainingSeconds = 0
+		}
+		data := struct {
+			MatchID          string
+			Message          string
+			Deadline         string
+			Paused           bool
+			RemainingSeconds int
+		}{
+			MatchID:          e.MatchID,
+			Message:          "Waiting for Dota 2 lobby...",
+			Deadline:         time.Now().Add(e.Remaining).Format(time.RFC3339),
+			Paused:           true,
+			RemainingSeconds: remainingSeconds,
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
+			log.Printf("Failed to render paused lobby countdown: %v", err)
+			return ""
+		}
+
+	case coordinator.LobbyCountdownResumed:
+		if !isUserInPlayers(userID, e.Players) {
+			return ""
+		}
+		data := struct {
+			MatchID          string
+			Message          string
+			Deadline         string
+			Paused           bool
+			RemainingSeconds int
+		}{
+			MatchID:  e.MatchID,
+			Message:  "Waiting for Dota 2 lobby...",
+			Deadline: e.Deadline.Format(time.RFC3339),
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
+			log.Printf("Failed to render resumed lobby countdown: %v", err)
 			return ""
 		}
 
@@ -382,6 +468,15 @@ type DraftData struct {
 	Deadline         string
 }
 
+type SideChoiceData struct {
+	MatchID          string
+	Captains         [2]coordinator.Player
+	SideChooserIndex int
+	AvailablePlayers []coordinator.Player
+	Deadline         string
+	UserID           string
+}
+
 func (h *SSEHub) renderInitialState(userID string) string {
 	queue, matches, _, _ := h.coordinator.GetState()
 
@@ -459,6 +554,20 @@ func (h *SSEHub) renderCurrentMatchArea(userID string) string {
 			return ""
 		}
 
+	case coordinator.MatchStateChoosingSide:
+		data := SideChoiceData{
+			MatchID:          match.ID,
+			Captains:         match.Captains,
+			SideChooserIndex: match.SideChooserIndex,
+			AvailablePlayers: match.AvailablePlayers,
+			Deadline:         match.SideChoiceDeadline.Format(time.RFC3339),
+			UserID:           userID,
+		}
+		if err := h.templates.ExecuteTemplate(&buf, "side-choice", data); err != nil {
+			log.Printf("Failed to render initial side choice: %v", err)
+			return ""
+		}
+
 	case coordinator.MatchStateDrafting:
 		data := DraftData{
 			MatchID:          match.ID,
@@ -475,14 +584,22 @@ func (h *SSEHub) renderCurrentMatchArea(userID string) string {
 		}
 
 	case coordinator.MatchStateWaitingForBot:
+		remainingSeconds := int(match.LobbyRemaining.Seconds())
+		if remainingSeconds < 0 {
+			remainingSeconds = 0
+		}
 		data := struct {
-			MatchID  string
-			Message  string
-			Deadline string
+			MatchID          string
+			Message          string
+			Deadline         string
+			Paused           bool
+			RemainingSeconds int
 		}{
-			MatchID:  match.ID,
-			Message:  "Waiting for Dota 2 lobby...",
-			Deadline: match.LobbyDeadline.Format(time.RFC3339),
+			MatchID:          match.ID,
+			Message:          "Waiting for Dota 2 lobby...",
+			Deadline:         match.LobbyDeadline.Format(time.RFC3339),
+			Paused:           match.LobbyPaused,
+			RemainingSeconds: remainingSeconds,
 		}
 		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
 			log.Printf("Failed to render initial waiting state: %v", err)

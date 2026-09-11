@@ -12,6 +12,7 @@
         .admin-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .state-badge { display:inline-block; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.8rem; font-weight:bold; text-transform:uppercase; }
         .state-accepting { background:#f0ad4e22; color:#f0ad4e; }
+        .state-choosing { background:rgba(74,158,255,0.13); color:var(--accent-primary); }
         .state-drafting { background:rgba(74,158,255,0.13); color:var(--accent-primary); }
         .state-waiting { background:#5bc0de22; color:#5bc0de; }
         .state-ingame { background:#5cb85c22; color:#5cb85c; }
@@ -44,6 +45,13 @@
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;">
                         <div><strong>Match:</strong> <code>{{$id}}</code> <span class="state-badge state-{{matchStateClass $match.State}}">{{matchStateName $match.State}}</span></div>
                         <div class="admin-actions">
+                            {{if eq $match.State 3}}
+                                {{if $match.LobbyPaused}}
+                                    <button class="btn btn-secondary btn-small" hx-post="/admin/match/{{$id}}/lobby-timer/resume" hx-swap="none">Resume Join Timer</button>
+                                {{else}}
+                                    <button class="btn btn-secondary btn-small" hx-post="/admin/match/{{$id}}/lobby-timer/pause" hx-swap="none">Pause Join Timer</button>
+                                {{end}}
+                            {{end}}
                             <button class="btn btn-secondary btn-small" hx-post="/admin/match/{{$id}}/cancel?return=true" hx-swap="none" hx-confirm="Cancel and return players to queue?">Cancel (Requeue)</button>
                             <button class="btn btn-danger btn-small" hx-post="/admin/match/{{$id}}/cancel?return=false" hx-swap="none" hx-confirm="Cancel without requeue?">Cancel (No Requeue)</button>
                         </div>

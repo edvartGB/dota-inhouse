@@ -101,6 +101,36 @@ func (s *Server) handleAcceptMatch(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handleChooseSide(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	matchID := chi.URLParam(r, "matchID")
+	side := chi.URLParam(r, "side")
+	if matchID == "" || side == "" {
+		http.Error(w, "match ID and side required", http.StatusBadRequest)
+		return
+	}
+
+	resp := make(chan error, 1)
+	s.coordinator.Send(coordinator.ChooseSide{
+		CaptainID: user.SteamID,
+		MatchID:   matchID,
+		Side:      side,
+		Response:  resp,
+	})
+
+	if err := waitForResponse(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handlePickPlayer(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
