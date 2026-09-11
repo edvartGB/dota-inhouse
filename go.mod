@@ -3,18 +3,19 @@ module github.com/edvart/dota-inhouse
 go 1.25.4
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/go-chi/chi/v5 v5.2.4
 	github.com/golang/protobuf v1.5.4
 	github.com/google/uuid v1.6.0
 	github.com/paralin/go-dota2 v0.0.0-20260418225115-803efa07c070
-	github.com/paralin/go-steam v0.0.0-20260416001652-4b80b1117268
+	github.com/paralin/go-steam v0.0.0-20260627095526-9a903700fc88
 	github.com/sirupsen/logrus v1.9.4
 	github.com/yohcop/openid-go v1.0.1
 	modernc.org/sqlite v1.44.3
 )
 
 require (
-	github.com/SherClockHolmes/webpush-go v1.4.0 // indirect
+	github.com/aperturerobotics/protobuf-go-lite v0.14.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

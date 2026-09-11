@@ -49,7 +49,7 @@ func (r *Recorder) recordMatchStarted(ctx context.Context, e coordinator.MatchSt
 		ID:          e.MatchID,
 		DotaMatchID: e.DotaMatchID,
 		State:       "in_progress",
-		StartedAt:   time.Now(),
+		StartedAt:   e.StartedAt,
 	}
 	players := buildMatchPlayers(e.MatchID, e.Radiant, e.Dire, e.Captains)
 

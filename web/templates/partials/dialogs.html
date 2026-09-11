@@ -43,7 +43,7 @@
         {{range .Players}}
         <li class="accept-player {{if index $.Accepted .SteamID}}accepted{{end}}">
             {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="" class="avatar-small" loading="lazy" decoding="async">{{end}}
-            <span>{{.Name}}</span>
+            <span class="accept-player-name">{{.Name}}</span>
             {{if index $.Accepted .SteamID}}<span class="accept-check">&#10003;</span>{{end}}
         </li>
         {{end}}
@@ -88,6 +88,9 @@
 <div id="match-area" hx-swap-oob="true">
     <div class="match-status">
         <h3>Match in Progress</h3>
+        {{if .StartedAt}}
+            <p class="match-elapsed-large">In game <span class="elapsed-time" data-started-at="{{.StartedAt}}">0m</span></p>
+        {{end}}
         <p>Dota 2 Match ID: {{.DotaMatchID}}</p>
     </div>
 </div>

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 	devents "github.com/paralin/go-dota2/events"
 	"github.com/paralin/go-dota2/protocol"
 	"github.com/paralin/go-steam"
+	"github.com/paralin/go-steam/protocol/steamlang"
 	"github.com/paralin/go-steam/steamid"
 	"github.com/sirupsen/logrus"
 )
@@ -29,6 +32,7 @@ type Bot struct {
 	gcReadyCh   chan struct{}
 	ctx         context.Context
 	cancel      context.CancelFunc
+	retryAfter  time.Duration
 	mu          sync.Mutex
 }
 
@@ -44,7 +48,7 @@ const gcMsgLiveScoreboardUpdate = uint32(protocol.EDOTAGCMsg_k_EMsgGCLiveScorebo
 
 var initSteamDirectoryOnce sync.Once
 
-func NewBot(username, password string) *Bot {
+func NewBot(username, password string, initialDelay time.Duration) *Bot {
 	initSteamDirectoryOnce.Do(func() {
 		if err := steam.InitializeSteamDirectory(); err != nil {
 			log.Printf("Failed to initialize Steam Directory (using static CM list): %v", err)
@@ -60,11 +64,19 @@ func NewBot(username, password string) *Bot {
 	}
 
 	loginInfo := &steam.LogOnDetails{
-		Username: username,
-		Password: password,
+		Username:               username,
+		Password:               password,
+		DeviceFriendlyName:     "dota-inhouse",
+		ShouldRememberPassword: true,
 	}
 
-	go bot.connectWithRetry(loginInfo, 20*time.Second)
+	go func() {
+		if initialDelay > 0 {
+			log.Printf("[%s] Waiting %v before initial Steam login", bot.name, initialDelay)
+			time.Sleep(initialDelay)
+		}
+		bot.connectWithRetry(loginInfo, 20*time.Second)
+	}()
 
 	return bot
 }
@@ -75,13 +87,20 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, timeout time.Durat
 		attempt++
 		log.Printf("[%s] Connection attempt %d", b.name, attempt)
 
+		var retryAfter time.Duration
 		firstConnected := b.attemptConnection(timeout)
 		if firstConnected != nil {
 			log.Printf("[%s] Connection established, listening to events", b.name)
-			b.handleEvents(loginInfo, firstConnected)
+			wasLoggedIn := b.handleEvents(loginInfo, firstConnected)
+			b.mu.Lock()
+			retryAfter = b.retryAfter
+			b.retryAfter = 0
+			b.mu.Unlock()
 			// If handleEvents returns, the connection was lost - reconnect
 			log.Printf("[%s] Connection lost, will reconnect...", b.name)
-			attempt = 0 // Reset attempt counter after successful connection
+			if wasLoggedIn {
+				attempt = 0 // Reset only after an authenticated session.
+			}
 		}
 
 		// Calculate backoff: 5s, 10s, 15s, ... up to 60s max.
@@ -93,6 +112,9 @@ func (b *Bot) connectWithRetry(loginInfo *steam.LogOnDetails, timeout time.Durat
 		backoff := time.Duration(retryAttempt) * 5 * time.Second
 		if backoff > 60*time.Second {
 			backoff = 60 * time.Second
+		}
+		if retryAfter > backoff {
+			backoff = retryAfter
 		}
 		log.Printf("[%s] Connection failed, retrying in %v...", b.name, backoff)
 		time.Sleep(backoff)
@@ -143,7 +165,7 @@ func (b *Bot) attemptConnection(timeout time.Duration) *steam.ConnectedEvent {
 	}
 }
 
-func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}) {
+func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}) (wasLoggedIn bool) {
 	const logonTimeout = 45 * time.Second
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -155,7 +177,7 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 
 	log.Printf("[%s] Listening to steam client events", b.name)
 
-	if b.processEvent(firstEvent, loginInfo) {
+	if b.processEvent(ctx, firstEvent, loginInfo) {
 		return
 	}
 
@@ -182,11 +204,12 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 				return
 			}
 
-			if b.processEvent(event, loginInfo) {
+			if b.processEvent(ctx, event, loginInfo) {
 				return
 			}
 			if waitingForLogon {
 				if _, ok := event.(*steam.LoggedOnEvent); ok {
+					wasLoggedIn = true
 					waitingForLogon = false
 					if !logonTimer.Stop() {
 						select {
@@ -200,11 +223,21 @@ func (b *Bot) handleEvents(loginInfo *steam.LogOnDetails, firstEvent interface{}
 	}
 }
 
-func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) bool {
+func (b *Bot) processEvent(ctx context.Context, event interface{}, loginInfo *steam.LogOnDetails) bool {
 	switch e := event.(type) {
 	case *steam.ConnectedEvent:
 		log.Printf("[%s] Connected, logging on…", b.name)
-		b.client.Auth.LogOn(loginInfo)
+		if err := b.client.Auth.LogOn(ctx, loginInfo); err != nil {
+			log.Printf("[%s] Steam authentication failed: %v", b.name, err)
+			if strings.Contains(err.Error(), "eresult 87") {
+				b.mu.Lock()
+				b.retryAfter = 15 * time.Minute
+				b.mu.Unlock()
+				log.Printf("[%s] Steam login is throttled; pausing before retry", b.name)
+			}
+			b.client.Disconnect()
+			return true
+		}
 		return false
 
 	case *steam.LoggedOnEvent:
@@ -215,7 +248,11 @@ func (b *Bot) processEvent(event interface{}, loginInfo *steam.LogOnDetails) boo
 		return false
 
 	case *steam.LogOnFailedEvent:
-		log.Printf("[%s] Logon failed: %v", b.name, e.Result)
+		if e.Err != nil {
+			log.Printf("[%s] Logon failed during %s: %v (available confirmations: %v)", b.name, e.AuthSessionState, e.Err, e.Confirmations)
+		} else {
+			log.Printf("[%s] Logon failed: %v", b.name, e.Result)
+		}
 		return false
 
 	case *steam.SteamFailureEvent:
@@ -343,6 +380,12 @@ func (b *Bot) IsAvailable() bool {
 	return b.loggedIn && !b.busy
 }
 
+func (b *Bot) IsLoggedIn() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.loggedIn
+}
+
 func (b *Bot) Status() Status {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -364,6 +407,39 @@ func (b *Bot) Status() Status {
 	}
 
 	return status
+}
+
+func (b *Bot) NotifyMatchAccept(matchID string, players []coordinator.Player, baseURL string) {
+	siteURL := strings.TrimRight(baseURL, "/")
+	if siteURL == "" {
+		siteURL = "/"
+	}
+
+	message := fmt.Sprintf("DNDL match found. Accept here: %s", siteURL)
+
+	b.mu.Lock()
+	client := b.client
+	loggedIn := b.loggedIn
+	botName := b.name
+	b.mu.Unlock()
+
+	if !loggedIn || client == nil {
+		log.Printf("[%s] Skipping Steam accept notifications for match %s: bot is not logged in", botName, matchID)
+		return
+	}
+
+	for _, player := range players {
+		id, err := strconv.ParseUint(player.SteamID, 10, 64)
+		if err != nil {
+			log.Printf("[%s] Skipping Steam accept notification for %s in match %s: invalid SteamID %q: %v", botName, player.Name, matchID, player.SteamID, err)
+			continue
+		}
+
+		steamID := steamid.SteamId(id)
+		client.Social.AddFriend(steamID)
+		client.Social.SendMessage(steamID, steamlang.EChatEntryType_ChatMsg, message)
+		log.Printf("[%s] Attempted Steam friend request and accept DM to %s (%s) for match %s", botName, player.Name, player.SteamID, matchID)
+	}
 }
 
 const (
@@ -613,6 +689,8 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 	var endGameOnce sync.Once
 	var relaunchTimer *time.Timer
 	var relaunchTimerCh <-chan time.Time
+	lastRunHeroLogKey := ""
+	runHeroSnapshotLogged := false
 
 	// Start lobby join timeout
 	timeoutTimer := time.NewTimer(LobbyJoinTimeout)
@@ -657,6 +735,18 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 			dota2Lobby := lobbyEvent.Object.(*protocol.CSODOTALobby)
 			currentLobby = dota2Lobby // Update tracked lobby state
 			currentState := dota2Lobby.GetState()
+
+			if currentState == protocol.CSODOTALobby_RUN {
+				heroLogKey := formatLobbyHeroIDs(dota2Lobby)
+				if !runHeroSnapshotLogged {
+					runHeroSnapshotLogged = true
+					lastRunHeroLogKey = heroLogKey
+					log.Printf("[%s] RUN lobby initial hero IDs for match %s: %s", b.name, matchID, heroLogKey)
+				} else if heroLogKey != lastRunHeroLogKey {
+					lastRunHeroLogKey = heroLogKey
+					log.Printf("[%s] RUN lobby hero IDs changed for match %s: %s", b.name, matchID, heroLogKey)
+				}
+			}
 
 			if currentState != lastState {
 				prevState := lastState
@@ -826,6 +916,39 @@ func (b *Bot) getCorrectlyJoinedPlayers(dota2Lobby *protocol.CSODOTALobby, expec
 	}
 
 	return correct
+}
+
+func formatLobbyHeroIDs(dota2Lobby *protocol.CSODOTALobby) string {
+	if dota2Lobby == nil {
+		return "none"
+	}
+
+	heroIDsBySteamID := make(map[uint64]int32)
+	for _, member := range dota2Lobby.GetAllMembers() {
+		heroID := member.GetHeroId()
+		if heroID <= 0 {
+			continue
+		}
+		heroIDsBySteamID[member.GetId()] = heroID
+	}
+
+	if len(heroIDsBySteamID) == 0 {
+		return "none"
+	}
+
+	steamIDs := make([]uint64, 0, len(heroIDsBySteamID))
+	for steamID := range heroIDsBySteamID {
+		steamIDs = append(steamIDs, steamID)
+	}
+	sort.Slice(steamIDs, func(i, j int) bool {
+		return steamIDs[i] < steamIDs[j]
+	})
+
+	parts := make([]string, 0, len(steamIDs))
+	for _, steamID := range steamIDs {
+		parts = append(parts, fmt.Sprintf("%d=%d", steamID, heroIDsBySteamID[steamID]))
+	}
+	return fmt.Sprintf("%d/%d [%s]", len(heroIDsBySteamID), len(dota2Lobby.GetAllMembers()), strings.Join(parts, ", "))
 }
 
 // Disconnect cleanly disconnects the bot from Steam.

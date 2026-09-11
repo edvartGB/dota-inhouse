@@ -7,7 +7,9 @@ type Event interface {
 }
 
 type QueueUpdated struct {
-	Queue []Player
+	Queue           []Player
+	ActionPlayerIDs []string
+	ActionsForAll   bool
 }
 
 func (QueueUpdated) event() {}
@@ -28,6 +30,7 @@ func (MatchAcceptStarted) event() {}
 
 type MatchAcceptUpdated struct {
 	MatchID  string
+	PlayerID string
 	Accepted map[string]bool
 }
 
@@ -84,6 +87,7 @@ func (RequestBotLobby) event() {}
 type MatchStarted struct {
 	MatchID     string
 	DotaMatchID uint64
+	StartedAt   time.Time
 	Players     []Player
 	Radiant     []Player
 	Dire        []Player

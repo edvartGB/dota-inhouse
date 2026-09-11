@@ -193,7 +193,10 @@ func (c *Coordinator) handleJoinQueue(cmd JoinQueue) error {
 	c.state.Queue = append(c.state.Queue, cmd.Player)
 	log.Printf("Player %s joined queue (%d/%d)", cmd.Player.Name, len(c.state.Queue), MaxPlayers)
 
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: []string{cmd.Player.SteamID},
+	})
 
 	if len(c.state.Queue) >= MaxPlayers {
 		c.startMatchAcceptance()
@@ -212,7 +215,10 @@ func (c *Coordinator) handleLeaveQueue(cmd LeaveQueue) error {
 	}
 
 	log.Printf("Player %s left queue (%d/%d)", cmd.PlayerID, len(c.state.Queue), MaxPlayers)
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: []string{cmd.PlayerID},
+	})
 
 	return nil
 }
@@ -236,7 +242,10 @@ func (c *Coordinator) startMatchAcceptance() {
 
 	log.Printf("Match %s started acceptance phase (%d active matches)", matchID, len(c.state.Matches))
 
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: playerSteamIDs(players),
+	})
 	c.emit(MatchAcceptStarted{
 		MatchID:  matchID,
 		Players:  players,
@@ -278,6 +287,7 @@ func (c *Coordinator) handleAcceptMatch(cmd AcceptMatch) error {
 
 	c.emit(MatchAcceptUpdated{
 		MatchID:  match.ID,
+		PlayerID: cmd.PlayerID,
 		Accepted: match.AcceptedPlayers,
 	})
 
@@ -318,7 +328,10 @@ func (c *Coordinator) handleMatchAcceptTimeout(cmd MatchAcceptTimeout) {
 		MatchID:       cmd.MatchID,
 		FailedPlayers: failedPlayers,
 	})
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: playerSteamIDs(match.Players),
+	})
 
 	delete(c.state.Matches, cmd.MatchID)
 
@@ -523,7 +536,10 @@ func (c *Coordinator) handleDraftPickTimeout(cmd DraftPickTimeout) {
 		FailedCaptain:   failedCaptain,
 		ReturnedToQueue: returnToQueue,
 	})
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: playerSteamIDs(match.Players),
+	})
 
 	delete(c.state.Matches, cmd.MatchID)
 
@@ -577,7 +593,10 @@ func (c *Coordinator) handleBotLobbyTimeout(cmd BotLobbyTimeout) {
 		FailedPlayers:   failedPlayers,
 		ReturnedToQueue: returnToQueue,
 	})
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: playerSteamIDs(match.Players),
+	})
 
 	delete(c.state.Matches, cmd.MatchID)
 
@@ -592,14 +611,17 @@ func (c *Coordinator) handleBotGameStarted(cmd BotGameStarted) {
 		return
 	}
 
+	startedAt := time.Now()
 	match.State = MatchStateInProgress
 	match.DotaMatchID = cmd.DotaMatchID
+	match.GameStartedAt = &startedAt
 
 	log.Printf("Match %s started (Dota Match ID: %d)", cmd.MatchID, cmd.DotaMatchID)
 
 	c.emit(MatchStarted{
 		MatchID:     cmd.MatchID,
 		DotaMatchID: cmd.DotaMatchID,
+		StartedAt:   startedAt,
 		Players:     match.Players,
 		Radiant:     match.Radiant,
 		Dire:        match.Dire,
@@ -689,20 +711,13 @@ func selectCaptains(players []Player) [2]Player {
 
 // assignCaptainSides orders captains for drafting:
 // captains[0] becomes Radiant/first-pick, captains[1] becomes Dire/second-pick.
-// The lower numeric captain priority gets the advantage; equal priorities are randomized.
+// Side placement is random and does not affect captain selection priority.
 func assignCaptainSides(captains [2]Player) [2]Player {
 	if captains[0].SteamID == "" || captains[1].SteamID == "" {
 		return captains
 	}
 
-	if captains[0].CaptainPriority == captains[1].CaptainPriority {
-		if rand.Intn(2) == 0 {
-			return captains
-		}
-		return [2]Player{captains[1], captains[0]}
-	}
-
-	if captains[0].CaptainPriority < captains[1].CaptainPriority {
+	if rand.Intn(2) == 0 {
 		return captains
 	}
 
@@ -766,7 +781,10 @@ func (c *Coordinator) handleAdminCancelMatch(cmd AdminCancelMatch) error {
 		ReturnedToQueue: cmd.ReturnToQueue,
 		Players:         match.Players,
 	})
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: playerSteamIDs(match.Players),
+	})
 
 	delete(c.state.Matches, cmd.MatchID)
 
@@ -825,7 +843,10 @@ func (c *Coordinator) handleAdminKickFromQueue(cmd AdminKickFromQueue) error {
 	}
 
 	c.state.Queue = newQueue
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:           c.state.Queue,
+		ActionPlayerIDs: []string{cmd.PlayerID},
+	})
 
 	return nil
 }
@@ -849,6 +870,17 @@ func (c *Coordinator) handleAdminSetQueueOpen(cmd AdminSetQueueOpen) error {
 
 	c.state.QueueOpen = cmd.Open
 	log.Printf("Admin set queue open=%v", c.state.QueueOpen)
-	c.emit(QueueUpdated{Queue: c.state.Queue})
+	c.emit(QueueUpdated{
+		Queue:         c.state.Queue,
+		ActionsForAll: true,
+	})
 	return nil
+}
+
+func playerSteamIDs(players []Player) []string {
+	ids := make([]string, 0, len(players))
+	for _, p := range players {
+		ids = append(ids, p.SteamID)
+	}
+	return ids
 }

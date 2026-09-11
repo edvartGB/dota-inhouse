@@ -48,6 +48,7 @@ type Match struct {
 	CurrentPicker    int      // 0 = radiant captain, 1 = dire captain
 	PickCount        int      // Number of picks made (used for timeout validation)
 	DotaMatchID      uint64
+	GameStartedAt    *time.Time
 }
 
 type LobbySettings struct {
