@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 )
@@ -53,10 +54,23 @@ func templateFuncs() template.FuncMap {
 		"getPlayerName": func(p coordinator.Player) string {
 			return p.Name
 		},
+		// sideChoiceData lets the full page render the same side-choice panel the SSE updates use.
+		"sideChoiceData": func(match *coordinator.Match, userID string) SideChoiceData {
+			return SideChoiceData{
+				MatchID:          match.ID,
+				Captains:         match.Captains,
+				SideChooserIndex: match.SideChooserIndex,
+				AvailablePlayers: match.AvailablePlayers,
+				Deadline:         match.SideChoiceDeadline.Format(time.RFC3339),
+				UserID:           userID,
+			}
+		},
 		"matchStateName": func(state coordinator.MatchState) string {
 			switch state {
 			case coordinator.MatchStateAccepting:
 				return "Accepting"
+			case coordinator.MatchStateChoosingSide:
+				return "Choosing Side"
 			case coordinator.MatchStateDrafting:
 				return "Drafting"
 			case coordinator.MatchStateWaitingForBot:
@@ -71,6 +85,8 @@ func templateFuncs() template.FuncMap {
 			switch state {
 			case coordinator.MatchStateAccepting:
 				return "state-accepting"
+			case coordinator.MatchStateChoosingSide:
+				return "state-choosing"
 			case coordinator.MatchStateDrafting:
 				return "state-drafting"
 			case coordinator.MatchStateWaitingForBot:
@@ -100,6 +116,12 @@ func templateFuncs() template.FuncMap {
 			m := *seconds / 60
 			s := *seconds % 60
 			return fmt.Sprintf("%d:%02d", m, s)
+		},
+		"remainingSeconds": func(d time.Duration) int {
+			if d <= 0 {
+				return 0
+			}
+			return int(d.Seconds())
 		},
 	}
 }

@@ -272,17 +272,34 @@ function updateElapsedTimes() {
     });
 }
 
-setInterval(function() {
+function updateCountdowns() {
     document.querySelectorAll('.countdown[data-deadline]').forEach(function(el) {
-        var remaining = Math.max(0, Math.floor((new Date(el.dataset.deadline) - Date.now()) / 1000));
+        var remaining;
+        if (el.dataset.paused === 'true') {
+            remaining = parseInt(el.dataset.remainingSeconds || '0', 10);
+            if (Number.isNaN(remaining)) remaining = 0;
+        } else {
+            remaining = Math.max(0, Math.floor((new Date(el.dataset.deadline) - Date.now()) / 1000));
+        }
         var m = Math.floor(remaining / 60);
         var s = remaining % 60;
         el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
         el.classList.toggle('countdown-urgent', remaining <= 10);
     });
+}
+
+setInterval(function() {
+    updateCountdowns();
     updateElapsedTimes();
 }, 1000);
 
+// Paint immediately so swapped-in panels don't show an empty timer until the next tick.
+document.body.addEventListener('htmx:load', function() {
+    updateCountdowns();
+    updateElapsedTimes();
+});
+
+updateCountdowns();
 updateElapsedTimes();
 
 function isTypingTarget(target) {

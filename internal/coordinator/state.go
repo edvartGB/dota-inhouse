@@ -13,6 +13,7 @@ type MatchState int
 
 const (
 	MatchStateAccepting     MatchState = iota // Waiting for players to accept
+	MatchStateChoosingSide                    // Side chooser selecting Radiant or Dire
 	MatchStateDrafting                        // Captains picking players
 	MatchStateWaitingForBot                   // Bot creating Dota lobby
 	MatchStateInProgress                      // Game running
@@ -22,6 +23,8 @@ func (s MatchState) String() string {
 	switch s {
 	case MatchStateAccepting:
 		return "accepting"
+	case MatchStateChoosingSide:
+		return "choosing_side"
 	case MatchStateDrafting:
 		return "drafting"
 	case MatchStateWaitingForBot:
@@ -34,21 +37,25 @@ func (s MatchState) String() string {
 }
 
 type Match struct {
-	ID               string
-	State            MatchState
-	Players          []Player        // All 10 players in this match
-	AcceptedPlayers  map[string]bool // SteamID -> accepted
-	AcceptDeadline   time.Time
-	PickDeadline     time.Time
-	LobbyDeadline    time.Time
-	Captains         [2]Player
-	Radiant          []Player
-	Dire             []Player
-	AvailablePlayers []Player // Players not yet drafted
-	CurrentPicker    int      // 0 = radiant captain, 1 = dire captain
-	PickCount        int      // Number of picks made (used for timeout validation)
-	DotaMatchID      uint64
-	GameStartedAt    *time.Time
+	ID                 string
+	State              MatchState
+	Players            []Player        // All 10 players in this match
+	AcceptedPlayers    map[string]bool // SteamID -> accepted
+	AcceptDeadline     time.Time
+	SideChoiceDeadline time.Time
+	PickDeadline       time.Time
+	LobbyDeadline      time.Time
+	LobbyPaused        bool
+	LobbyRemaining     time.Duration
+	Captains           [2]Player
+	Radiant            []Player
+	Dire               []Player
+	AvailablePlayers   []Player // Players not yet drafted
+	SideChooserIndex   int      // Which captain chooses side
+	CurrentPicker      int      // 0 = radiant captain, 1 = dire captain
+	PickCount          int      // Number of picks made (used for timeout validation)
+	DotaMatchID        uint64
+	GameStartedAt      *time.Time
 }
 
 type LobbySettings struct {

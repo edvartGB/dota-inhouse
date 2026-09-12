@@ -121,6 +121,7 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Post("/queue/join", s.handleJoinQueue)
 		r.Post("/queue/leave", s.handleLeaveQueue)
 		r.Post("/match/{matchID}/accept", s.handleAcceptMatch)
+		r.Post("/match/{matchID}/side/{side}", s.handleChooseSide)
 		r.Post("/match/{matchID}/pick/{playerID}", s.handlePickPlayer)
 
 		// Push subscription management
@@ -144,6 +145,8 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 		r.Get("/admin/broken-matches", s.handleAdminBrokenMatchesPage)
 		r.Get("/admin/state", s.handleAdminState)
 		r.Post("/admin/match/{matchID}/cancel", s.handleAdminCancelMatch)
+		r.Post("/admin/match/{matchID}/lobby-timer/pause", s.handleAdminPauseLobbyCountdown)
+		r.Post("/admin/match/{matchID}/lobby-timer/resume", s.handleAdminResumeLobbyCountdown)
 		r.Post("/admin/match/{matchID}/result/{winner}", s.handleAdminSetResult)
 		r.Post("/admin/queue/kick/{playerID}", s.handleAdminKickPlayer)
 		r.Post("/admin/player/{playerID}/priority/{priority}", s.handleAdminSetCaptainPriority)
@@ -166,6 +169,30 @@ func (s *Server) StartSSE(events <-chan coordinator.Event) {
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	user, _ := s.sessions.GetUser(r.Context(), r)
 
+	var data PageData
+	if user != nil {
+		data = s.buildIndexPageData(user)
+	} else {
+		queue, matches, lobbySettings, queueOpen := s.coordinator.GetState()
+		matchList := make([]*coordinator.Match, 0, len(matches))
+		for _, m := range matches {
+			matchList = append(matchList, m)
+		}
+		data = PageData{
+			Queue:        queue,
+			Matches:      matchList,
+			QueueOpen:    queueOpen,
+			GameModeName: gameModeName(lobbySettings.GameMode),
+		}
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {
+		log.Printf("Template error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) buildIndexPageData(user *store.User) PageData {
 	queue, matches, lobbySettings, queueOpen := s.coordinator.GetState()
 
 	matchList := make([]*coordinator.Match, 0, len(matches))
@@ -179,24 +206,19 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Matches:      matchList,
 		QueueOpen:    queueOpen,
 		GameModeName: gameModeName(lobbySettings.GameMode),
+		IsAdmin:      s.adminConfig.IsAdmin(user.SteamID),
 	}
 
-	if user != nil {
-		data.IsAdmin = s.adminConfig.IsAdmin(user.SteamID)
-		for _, p := range queue {
-			if p.SteamID == user.SteamID {
-				data.InQueue = true
-				break
-			}
+	for _, p := range queue {
+		if p.SteamID == user.SteamID {
+			data.InQueue = true
+			break
 		}
-		data.Match = s.coordinator.GetPlayerMatch(user.SteamID)
-		data.InMatch = data.Match != nil
 	}
+	data.Match = s.coordinator.GetPlayerMatch(user.SteamID)
+	data.InMatch = data.Match != nil
 
-	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {
-		log.Printf("Template error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	return data
 }
 
 type PageData struct {

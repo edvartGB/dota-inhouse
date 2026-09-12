@@ -122,7 +122,7 @@
             {{range .Matches}}
                 <li class="match-item {{.State | matchStateClass}}">
                     <span class="match-status-badge">{{.State | matchStateName}}</span>
-                    {{if and (eq .State 3) .GameStartedAt}}
+                    {{if and (eq .State 4) .GameStartedAt}}
                         <span class="match-elapsed">
                             In game <span class="elapsed-time" data-started-at="{{.GameStartedAt.Format "2006-01-02T15:04:05Z07:00"}}">0m</span>
                         </span>

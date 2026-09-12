@@ -15,7 +15,8 @@ import (
 var MaxPlayers = 10
 
 const (
-	MatchAcceptTimeoutDur = 30 * time.Second
+	MatchAcceptTimeoutDur = 60 * time.Second
+	SideChoiceTimeoutDur  = 60 * time.Second
 	DraftPickTimeoutDur   = 60 * time.Second
 	LobbyJoinTimeoutDur   = 5 * time.Minute
 )
@@ -143,6 +144,11 @@ func (c *Coordinator) handleCommand(cmd Command) {
 		if cmd.Response != nil {
 			cmd.Response <- err
 		}
+	case ChooseSide:
+		err := c.handleChooseSide(cmd)
+		if cmd.Response != nil {
+			cmd.Response <- err
+		}
 	case MatchAcceptTimeout:
 		c.handleMatchAcceptTimeout(cmd)
 	case BotLobbyReady:
@@ -151,10 +157,16 @@ func (c *Coordinator) handleCommand(cmd Command) {
 		c.handleBotGameStarted(cmd)
 	case BotGameEnded:
 		c.handleBotGameEnded(cmd)
+	case SideChoiceTimeout:
+		c.handleSideChoiceTimeout(cmd)
 	case DraftPickTimeout:
 		c.handleDraftPickTimeout(cmd)
 	case BotLobbyTimeout:
 		c.handleBotLobbyTimeout(cmd)
+	case AdminPauseLobbyCountdown:
+		cmd.Response <- c.handleAdminPauseLobbyCountdown(cmd)
+	case AdminResumeLobbyCountdown:
+		cmd.Response <- c.handleAdminResumeLobbyCountdown(cmd)
 	case AdminCancelMatch:
 		cmd.Response <- c.handleAdminCancelMatch(cmd)
 	case AdminSetMatchResult:
@@ -292,7 +304,7 @@ func (c *Coordinator) handleAcceptMatch(cmd AcceptMatch) error {
 	})
 
 	if len(match.AcceptedPlayers) >= MaxPlayers {
-		c.startDraft(match)
+		c.startSideChoice(match)
 	}
 
 	return nil
@@ -340,19 +352,43 @@ func (c *Coordinator) handleMatchAcceptTimeout(cmd MatchAcceptTimeout) {
 	}
 }
 
-func (c *Coordinator) startDraft(match *Match) {
+func (c *Coordinator) startSideChoice(match *Match) {
 	if match == nil || match.State != MatchStateAccepting {
 		return
 	}
 
-	captains := assignCaptainSides(selectCaptains(match.Players))
-
-	var available []Player
-	for _, p := range match.Players {
-		if p.SteamID != captains[0].SteamID && p.SteamID != captains[1].SteamID {
-			available = append(available, p)
-		}
+	captains := selectCaptains(match.Players)
+	if captains[0].SteamID == "" || captains[1].SteamID == "" {
+		return
 	}
+
+	match.State = MatchStateChoosingSide
+	match.Captains = captains
+	match.SideChooserIndex = getSideChooserIndex(captains)
+	match.SideChoiceDeadline = time.Now().Add(SideChoiceTimeoutDur)
+	match.AvailablePlayers = nonCaptainPlayers(match.Players, captains)
+
+	chooser := captains[match.SideChooserIndex]
+	log.Printf("Match %s started side choice. Chooser: %s (priority %d)", match.ID, chooser.Name, chooser.CaptainPriority)
+
+	c.emit(SideChoiceStarted{
+		MatchID:          match.ID,
+		Players:          match.Players,
+		Captains:         captains,
+		SideChooserIndex: match.SideChooserIndex,
+		Available:        match.AvailablePlayers,
+		Deadline:         match.SideChoiceDeadline,
+	})
+
+	c.scheduleSideChoiceTimeout(match.ID)
+}
+
+func (c *Coordinator) startDraftWithCaptains(match *Match, captains [2]Player) {
+	if match == nil {
+		return
+	}
+
+	available := nonCaptainPlayers(match.Players, captains)
 
 	match.State = MatchStateDrafting
 	match.Captains = captains
@@ -382,6 +418,46 @@ func (c *Coordinator) startDraft(match *Match) {
 	}
 
 	c.scheduleDraftTimeout(match.ID, 0)
+}
+
+func (c *Coordinator) handleChooseSide(cmd ChooseSide) error {
+	match := c.state.GetMatch(cmd.MatchID)
+	if match == nil {
+		return errors.New("match not found")
+	}
+	if match.State != MatchStateChoosingSide {
+		return errors.New("match not waiting for side choice")
+	}
+	if cmd.Side != "radiant" && cmd.Side != "dire" {
+		return errors.New("side must be 'radiant' or 'dire'")
+	}
+
+	chooser := match.Captains[match.SideChooserIndex]
+	if chooser.SteamID != cmd.CaptainID {
+		return errors.New("not your side choice")
+	}
+
+	captains := arrangeCaptainsForSideChoice(match.Captains, match.SideChooserIndex, cmd.Side)
+	log.Printf("Match %s side choice: %s chose %s", cmd.MatchID, chooser.Name, cmd.Side)
+	c.startDraftWithCaptains(match, captains)
+	return nil
+}
+
+func (c *Coordinator) scheduleSideChoiceTimeout(matchID string) {
+	go func() {
+		time.Sleep(SideChoiceTimeoutDur)
+		c.Send(SideChoiceTimeout{MatchID: matchID})
+	}()
+}
+
+func (c *Coordinator) handleSideChoiceTimeout(cmd SideChoiceTimeout) {
+	match := c.state.GetMatch(cmd.MatchID)
+	if match == nil || match.State != MatchStateChoosingSide {
+		return
+	}
+
+	log.Printf("Match %s side choice timed out; assigning sides randomly", cmd.MatchID)
+	c.startDraftWithCaptains(match, assignCaptainSides(match.Captains))
 }
 
 func (c *Coordinator) handlePickPlayer(cmd PickPlayer) error {
@@ -480,6 +556,8 @@ func (c *Coordinator) completeDraft(match *Match) {
 
 	match.State = MatchStateWaitingForBot
 	match.LobbyDeadline = time.Now().Add(LobbyJoinTimeoutDur)
+	match.LobbyPaused = false
+	match.LobbyRemaining = 0
 
 	log.Printf("Match %s draft complete, requesting bot lobby", match.ID)
 
@@ -548,6 +626,63 @@ func (c *Coordinator) handleDraftPickTimeout(cmd DraftPickTimeout) {
 	}
 }
 
+func (c *Coordinator) handleAdminPauseLobbyCountdown(cmd AdminPauseLobbyCountdown) error {
+	match := c.state.GetMatch(cmd.MatchID)
+	if match == nil {
+		return errors.New("match not found")
+	}
+	if match.State != MatchStateWaitingForBot {
+		return errors.New("match is not waiting for lobby")
+	}
+	if match.LobbyPaused {
+		return errors.New("lobby countdown is already paused")
+	}
+
+	remaining := time.Until(match.LobbyDeadline)
+	if remaining < 0 {
+		remaining = 0
+	}
+	match.LobbyPaused = true
+	match.LobbyRemaining = remaining
+
+	log.Printf("Admin paused lobby countdown for match %s with %v remaining", cmd.MatchID, remaining)
+	c.emit(LobbyCountdownPaused{
+		MatchID:   cmd.MatchID,
+		Players:   match.Players,
+		Remaining: remaining,
+	})
+	return nil
+}
+
+func (c *Coordinator) handleAdminResumeLobbyCountdown(cmd AdminResumeLobbyCountdown) error {
+	match := c.state.GetMatch(cmd.MatchID)
+	if match == nil {
+		return errors.New("match not found")
+	}
+	if match.State != MatchStateWaitingForBot {
+		return errors.New("match is not waiting for lobby")
+	}
+	if !match.LobbyPaused {
+		return errors.New("lobby countdown is not paused")
+	}
+
+	remaining := match.LobbyRemaining
+	if remaining <= 0 {
+		remaining = time.Second
+	}
+	match.LobbyDeadline = time.Now().Add(remaining)
+	match.LobbyPaused = false
+	match.LobbyRemaining = 0
+
+	log.Printf("Admin resumed lobby countdown for match %s; new deadline %s", cmd.MatchID, match.LobbyDeadline.Format(time.RFC3339))
+	c.emit(LobbyCountdownResumed{
+		MatchID:  cmd.MatchID,
+		Players:  match.Players,
+		Deadline: match.LobbyDeadline,
+	})
+	return nil
+}
+
 func (c *Coordinator) handleBotLobbyReady(cmd BotLobbyReady) {
 	match := c.state.GetMatch(cmd.MatchID)
 	if match == nil {
@@ -564,6 +699,17 @@ func (c *Coordinator) handleBotLobbyTimeout(cmd BotLobbyTimeout) {
 
 	if match.State != MatchStateWaitingForBot {
 		return // Game already started
+	}
+
+	if !cmd.Deadline.IsZero() {
+		if match.LobbyPaused {
+			log.Printf("Ignoring lobby join timeout for paused match %s", cmd.MatchID)
+			return
+		}
+		if !match.LobbyDeadline.Equal(cmd.Deadline) {
+			log.Printf("Ignoring stale lobby join timeout for match %s", cmd.MatchID)
+			return
+		}
 	}
 
 	log.Printf("Match %s: lobby join timeout", cmd.MatchID)
@@ -707,6 +853,44 @@ func selectCaptains(players []Player) [2]Player {
 	})
 
 	return [2]Player{sorted[0], sorted[1]}
+}
+
+// nonCaptainPlayers returns the match players who are not one of the two captains.
+func nonCaptainPlayers(players []Player, captains [2]Player) []Player {
+	var available []Player
+	for _, p := range players {
+		if p.SteamID != captains[0].SteamID && p.SteamID != captains[1].SteamID {
+			available = append(available, p)
+		}
+	}
+	return available
+}
+
+// getSideChooserIndex returns the lower-priority selected captain.
+// Equal priorities are broken randomly.
+func getSideChooserIndex(captains [2]Player) int {
+	if captains[0].SteamID == "" || captains[1].SteamID == "" {
+		return 0
+	}
+	if captains[0].CaptainPriority == captains[1].CaptainPriority {
+		return rand.Intn(2)
+	}
+	if captains[0].CaptainPriority < captains[1].CaptainPriority {
+		return 0
+	}
+	return 1
+}
+
+func arrangeCaptainsForSideChoice(captains [2]Player, chooserIndex int, side string) [2]Player {
+	if chooserIndex != 0 && chooserIndex != 1 {
+		chooserIndex = 0
+	}
+	otherIndex := 1 - chooserIndex
+
+	if side == "radiant" {
+		return [2]Player{captains[chooserIndex], captains[otherIndex]}
+	}
+	return [2]Player{captains[otherIndex], captains[chooserIndex]}
 }
 
 // assignCaptainSides orders captains for drafting:

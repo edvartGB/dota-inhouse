@@ -36,6 +36,28 @@ type MatchAcceptUpdated struct {
 
 func (MatchAcceptUpdated) event() {}
 
+type SideChoiceStarted struct {
+	MatchID          string
+	Players          []Player
+	Captains         [2]Player
+	SideChooserIndex int
+	Available        []Player
+	Deadline         time.Time
+}
+
+func (SideChoiceStarted) event() {}
+
+type SideChoiceUpdated struct {
+	MatchID          string
+	Players          []Player
+	Captains         [2]Player
+	SideChooserIndex int
+	Available        []Player
+	Deadline         time.Time
+}
+
+func (SideChoiceUpdated) event() {}
+
 type DraftStarted struct {
 	MatchID   string
 	Captains  [2]Player
@@ -83,6 +105,22 @@ type RequestBotLobby struct {
 }
 
 func (RequestBotLobby) event() {}
+
+type LobbyCountdownPaused struct {
+	MatchID   string
+	Players   []Player
+	Remaining time.Duration
+}
+
+func (LobbyCountdownPaused) event() {}
+
+type LobbyCountdownResumed struct {
+	MatchID  string
+	Players  []Player
+	Deadline time.Time
+}
+
+func (LobbyCountdownResumed) event() {}
 
 type MatchStarted struct {
 	MatchID     string

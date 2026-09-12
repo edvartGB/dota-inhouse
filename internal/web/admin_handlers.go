@@ -263,6 +263,50 @@ func (s *Server) handleAdminCancelMatch(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handleAdminPauseLobbyCountdown(w http.ResponseWriter, r *http.Request) {
+	matchID := chi.URLParam(r, "matchID")
+	if matchID == "" {
+		http.Error(w, "match ID required", http.StatusBadRequest)
+		return
+	}
+
+	resp := make(chan error, 1)
+	s.coordinator.Send(coordinator.AdminPauseLobbyCountdown{
+		MatchID:  matchID,
+		Response: resp,
+	})
+
+	if err := waitForResponse(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Admin paused lobby countdown for match %s", matchID[:8])
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminResumeLobbyCountdown(w http.ResponseWriter, r *http.Request) {
+	matchID := chi.URLParam(r, "matchID")
+	if matchID == "" {
+		http.Error(w, "match ID required", http.StatusBadRequest)
+		return
+	}
+
+	resp := make(chan error, 1)
+	s.coordinator.Send(coordinator.AdminResumeLobbyCountdown{
+		MatchID:  matchID,
+		Response: resp,
+	})
+
+	if err := waitForResponse(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Admin resumed lobby countdown for match %s", matchID[:8])
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleAdminSetQueueStatus(w http.ResponseWriter, r *http.Request) {
 	status := chi.URLParam(r, "status")
 	var open bool

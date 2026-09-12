@@ -443,7 +443,6 @@ func (b *Bot) NotifyMatchAccept(matchID string, players []coordinator.Player, ba
 }
 
 const (
-	LobbyJoinTimeout         = 5 * time.Minute
 	DotaGCReadyTimeout       = 15 * time.Second
 	LobbyCreationTimeout     = 15 * time.Second
 	LobbyDestroyTimeout      = 5 * time.Second
@@ -468,7 +467,7 @@ func gameModeFromString(mode string) protocol.DOTA_GameMode {
 	}
 }
 
-func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordinator.Player, radiant []coordinator.Player, dire []coordinator.Player, gameMode string, leagueID uint32, commands chan<- coordinator.Command) bool {
+func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordinator.Player, radiant []coordinator.Player, dire []coordinator.Player, gameMode string, leagueID uint32, lobbyDeadline time.Time, lobbyTimerControls <-chan lobbyTimerControl, commands chan<- coordinator.Command) bool {
 	b.mu.Lock()
 	if !b.loggedIn {
 		b.mu.Unlock()
@@ -560,7 +559,7 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 
 	commands <- coordinator.BotLobbyReady{MatchID: matchID}
 
-	b.monitorLobbyState(ctx, sessionCtx, dotaClient, matchID, radiant, dire, commands)
+	b.monitorLobbyState(ctx, sessionCtx, dotaClient, matchID, radiant, dire, lobbyDeadline, lobbyTimerControls, commands)
 	return true
 }
 
@@ -649,7 +648,7 @@ func (b *Bot) reconnectAfterDotaFailure(dotaClient *dota2.Dota2, reason string) 
 	}
 }
 
-func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context, dotaClient *dota2.Dota2, matchID string, expectedRadiant []coordinator.Player, expectedDire []coordinator.Player, commands chan<- coordinator.Command) {
+func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context, dotaClient *dota2.Dota2, matchID string, expectedRadiant []coordinator.Player, expectedDire []coordinator.Player, lobbyDeadline time.Time, lobbyTimerControls <-chan lobbyTimerControl, commands chan<- coordinator.Command) {
 	eventCh, eventCancel, err := dotaClient.GetCache().SubscribeType(cso.Lobby)
 	if err != nil {
 		log.Printf("[%s] Failed to subscribe to lobby events: %v", b.name, err)
@@ -692,16 +691,72 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 	lastRunHeroLogKey := ""
 	runHeroSnapshotLogged := false
 
-	// Start lobby join timeout
-	timeoutTimer := time.NewTimer(LobbyJoinTimeout)
-	defer timeoutTimer.Stop()
+	timeoutLobby := func(reason string) {
+		joinedCorrectly := b.getCorrectlyJoinedPlayers(currentLobby, expectedTeam)
+		commands <- coordinator.BotLobbyTimeout{
+			MatchID:            matchID,
+			Deadline:           lobbyDeadline,
+			PlayersJoinedRight: joinedCorrectly,
+		}
+		b.destroyLobbyWithTimeout(sessionCtx, dotaClient, reason)
+	}
+
+	var timeoutTimer *time.Timer
+	var timeoutTimerCh <-chan time.Time
+	stopLobbyTimer := func() {
+		if timeoutTimer == nil {
+			return
+		}
+		if !timeoutTimer.Stop() {
+			select {
+			case <-timeoutTimerCh:
+			default:
+			}
+		}
+		timeoutTimer = nil
+		timeoutTimerCh = nil
+	}
+	startLobbyTimer := func(deadline time.Time) bool {
+		stopLobbyTimer()
+		timeoutDuration := time.Until(deadline)
+		if timeoutDuration <= 0 {
+			return false
+		}
+		timeoutTimer = time.NewTimer(timeoutDuration)
+		timeoutTimerCh = timeoutTimer.C
+		log.Printf("[%s] Started lobby join timer for match %s (deadline: %s, remaining: %v)", b.name, matchID, deadline.Format(time.RFC3339), timeoutDuration)
+		return true
+	}
+	defer stopLobbyTimer()
 	defer func() {
 		if relaunchTimer != nil {
 			relaunchTimer.Stop()
 		}
 	}()
 
-	log.Printf("[%s] Started monitoring lobby state (timeout: %v)", b.name, LobbyJoinTimeout)
+	lobbyPaused := false
+	for {
+		select {
+		case control := <-lobbyTimerControls:
+			if control.Paused {
+				lobbyPaused = true
+				continue
+			}
+			lobbyPaused = false
+			lobbyDeadline = control.Deadline
+		default:
+			goto lobbyTimerReady
+		}
+	}
+
+lobbyTimerReady:
+	if lobbyPaused {
+		log.Printf("[%s] Lobby join timer for match %s is paused", b.name, matchID)
+	} else if !startLobbyTimer(lobbyDeadline) {
+		log.Printf("[%s] Lobby join deadline already passed", b.name)
+		timeoutLobby("lobby join deadline passed")
+		return
+	}
 
 	for {
 		select {
@@ -713,16 +768,28 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 			log.Printf("[%s] Lobby monitoring stopped: steam session ended", b.name)
 			return
 
-		case <-timeoutTimer.C:
+		case <-timeoutTimerCh:
+			timeoutTimer = nil
+			timeoutTimerCh = nil
 			if !launched && !gameEnded {
 				log.Printf("[%s] Lobby join timeout reached", b.name)
-				// Get list of players who joined correctly from last known state
-				joinedCorrectly := b.getCorrectlyJoinedPlayers(currentLobby, expectedTeam)
-				commands <- coordinator.BotLobbyTimeout{
-					MatchID:            matchID,
-					PlayersJoinedRight: joinedCorrectly,
-				}
-				b.destroyLobbyWithTimeout(sessionCtx, dotaClient, "lobby join timeout")
+				timeoutLobby("lobby join timeout")
+				return
+			}
+
+		case control := <-lobbyTimerControls:
+			if control.Paused {
+				lobbyPaused = true
+				stopLobbyTimer()
+				log.Printf("[%s] Lobby join timer paused for match %s", b.name, matchID)
+				continue
+			}
+
+			lobbyPaused = false
+			lobbyDeadline = control.Deadline
+			if !startLobbyTimer(lobbyDeadline) {
+				log.Printf("[%s] Lobby join deadline already passed after resume", b.name)
+				timeoutLobby("lobby join deadline passed after resume")
 				return
 			}
 
@@ -811,12 +878,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 				if b.checkAllPlayersCorrect(dota2Lobby, expectedTeam) {
 					log.Printf("[%s] All players on correct teams! Starting game...", b.name)
 					launched = true
-					if !timeoutTimer.Stop() {
-						select {
-						case <-timeoutTimer.C:
-						default:
-						}
-					}
+					stopLobbyTimer()
 					dotaClient.LaunchLobby()
 					log.Printf("[%s] Game launch command sent!", b.name)
 				}
@@ -835,12 +897,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 				log.Printf("[%s] Relaunching game after RUN -> UI regression (attempt %d/%d)",
 					b.name, relaunchAttempts, MaxLobbyRelaunchAttempts)
 				launched = true
-				if !timeoutTimer.Stop() {
-					select {
-					case <-timeoutTimer.C:
-					default:
-					}
-				}
+				stopLobbyTimer()
 				dotaClient.LaunchLobby()
 				log.Printf("[%s] Relaunch command sent!", b.name)
 			} else {

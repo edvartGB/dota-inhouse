@@ -37,6 +37,15 @@ type PickPlayer struct {
 
 func (PickPlayer) command() {}
 
+type ChooseSide struct {
+	CaptainID string
+	MatchID   string
+	Side      string // "radiant" or "dire"
+	Response  chan error
+}
+
+func (ChooseSide) command() {}
+
 type MatchAcceptTimeout struct {
 	MatchID   string
 	StartedAt time.Time
@@ -65,6 +74,12 @@ type BotGameEnded struct {
 
 func (BotGameEnded) command() {}
 
+type SideChoiceTimeout struct {
+	MatchID string
+}
+
+func (SideChoiceTimeout) command() {}
+
 type DraftPickTimeout struct {
 	MatchID    string
 	PickNumber int // Which pick this timeout was for
@@ -74,10 +89,25 @@ func (DraftPickTimeout) command() {}
 
 type BotLobbyTimeout struct {
 	MatchID            string
+	Deadline           time.Time
 	PlayersJoinedRight []string // Steam IDs of players who joined on correct team
 }
 
 func (BotLobbyTimeout) command() {}
+
+type AdminPauseLobbyCountdown struct {
+	MatchID  string
+	Response chan error
+}
+
+func (AdminPauseLobbyCountdown) command() {}
+
+type AdminResumeLobbyCountdown struct {
+	MatchID  string
+	Response chan error
+}
+
+func (AdminResumeLobbyCountdown) command() {}
 
 type AdminCancelMatch struct {
 	MatchID       string
