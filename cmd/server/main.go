@@ -185,8 +185,9 @@ func main() {
 		}()
 
 		botManager = bot.NewManager(bot.Config{
-			Bots:    validCreds,
-			BaseURL: baseURL,
+			Bots:        validCreds,
+			BaseURL:     baseURL,
+			SteamAPIKey: steamAPIKey,
 		}, botCommands)
 		botEvents = coord.Subscribe()
 	} else {

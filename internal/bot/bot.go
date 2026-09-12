@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/dotaapi"
 	"github.com/golang/protobuf/proto"
 	"github.com/paralin/go-dota2"
 	"github.com/paralin/go-dota2/cso"
@@ -26,6 +28,7 @@ type Bot struct {
 	name        string
 	client      *steam.Client
 	dota2Client *dota2.Dota2
+	realtime    *dotaapi.RealtimeClient
 	loggedIn    bool
 	busy        bool
 	gcReady     bool
@@ -48,7 +51,7 @@ const gcMsgLiveScoreboardUpdate = uint32(protocol.EDOTAGCMsg_k_EMsgGCLiveScorebo
 
 var initSteamDirectoryOnce sync.Once
 
-func NewBot(username, password string, initialDelay time.Duration) *Bot {
+func NewBot(username, password string, initialDelay time.Duration, steamAPIKey string) *Bot {
 	initSteamDirectoryOnce.Do(func() {
 		if err := steam.InitializeSteamDirectory(); err != nil {
 			log.Printf("Failed to initialize Steam Directory (using static CM list): %v", err)
@@ -61,6 +64,9 @@ func NewBot(username, password string, initialDelay time.Duration) *Bot {
 		name:      username,
 		client:    steam.NewClient(),
 		gcReadyCh: make(chan struct{}),
+	}
+	if steamAPIKey != "" {
+		bot.realtime = dotaapi.NewRealtimeClient(steamAPIKey)
 	}
 
 	loginInfo := &steam.LogOnDetails{
@@ -690,6 +696,8 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 	var relaunchTimerCh <-chan time.Time
 	lastRunHeroLogKey := ""
 	runHeroSnapshotLogged := false
+	lastGameState := protocol.DOTA_GameState(-1)
+	serverProbeLogged := false
 
 	timeoutLobby := func(reason string) {
 		joinedCorrectly := b.getCorrectlyJoinedPlayers(currentLobby, expectedTeam)
@@ -802,6 +810,16 @@ lobbyTimerReady:
 			dota2Lobby := lobbyEvent.Object.(*protocol.CSODOTALobby)
 			currentLobby = dota2Lobby // Update tracked lobby state
 			currentState := dota2Lobby.GetState()
+
+			if !serverProbeLogged && dota2Lobby.GetServerId() != 0 {
+				serverProbeLogged = true
+				b.startLiveDataProbe(ctx, dota2Lobby, matchID)
+			}
+
+			if gameState := dota2Lobby.GetGameState(); gameState != lastGameState {
+				lastGameState = gameState
+				log.Printf("[%s] Lobby game_state for match %s: %v", b.name, matchID, gameState)
+			}
 
 			if currentState == protocol.CSODOTALobby_RUN {
 				heroLogKey := formatLobbyHeroIDs(dota2Lobby)
@@ -973,6 +991,136 @@ func (b *Bot) getCorrectlyJoinedPlayers(dota2Lobby *protocol.CSODOTALobby, expec
 	}
 
 	return correct
+}
+
+// Live data probe tuning. Temporary: remove along with the probe once we know
+// whether lobby server_id feeds GetRealtimeStats.
+const (
+	liveProbeInterval    = 10 * time.Second
+	liveProbeMaxDuration = 2 * time.Hour
+	// Valve returns 400 once a server is deallocated, so a short run of them
+	// means the match is over rather than that the endpoint is broken.
+	liveProbeMaxUnavailable = 3
+)
+
+// startLiveDataProbe logs the identifiers needed to evaluate live hero-pick
+// sources, then polls GetRealtimeStats for the life of the match. It only
+// logs; nothing is persisted or sent to the coordinator.
+func (b *Bot) startLiveDataProbe(ctx context.Context, dota2Lobby *protocol.CSODOTALobby, matchID string) {
+	serverID := dota2Lobby.GetServerId()
+
+	log.Printf(
+		"[%s] LIVE PROBE match=%s lobby_id=%d server_id=%d dota_match_id=%d lobby_state=%v game_state=%v",
+		b.name,
+		matchID,
+		dota2Lobby.GetLobbyId(),
+		serverID,
+		dota2Lobby.GetMatchId(),
+		dota2Lobby.GetState(),
+		dota2Lobby.GetGameState(),
+	)
+
+	// Gameserver SteamIDs observed from Valve's live APIs all fall in the
+	// 90xxxxxxxxxxxxxxx range. Anything else means server_id is not what
+	// GetRealtimeStats wants.
+	if serverID < 90000000000000000 || serverID > 91000000000000000 {
+		log.Printf("[%s] LIVE PROBE server_id=%d is outside the expected gameserver SteamID range, not polling", b.name, serverID)
+		return
+	}
+
+	if b.realtime == nil {
+		log.Printf("[%s] LIVE PROBE skipping poll for match %s: no Steam API key configured", b.name, matchID)
+		return
+	}
+
+	go b.pollRealtimeStats(ctx, serverID, matchID)
+}
+
+func (b *Bot) pollRealtimeStats(ctx context.Context, serverID uint64, matchID string) {
+	probeCtx, cancel := context.WithTimeout(ctx, liveProbeMaxDuration)
+	defer cancel()
+
+	ticker := time.NewTicker(liveProbeInterval)
+	defer ticker.Stop()
+
+	log.Printf("[%s] LIVE PROBE polling GetRealtimeStats for match %s every %v", b.name, matchID, liveProbeInterval)
+
+	unavailable := 0
+	for {
+		stats, err := b.realtime.GetRealtimeStats(probeCtx, serverID)
+		switch {
+		case err == nil:
+			unavailable = 0
+			log.Printf("[%s] LIVE PROBE %s", b.name, formatRealtimeStats(matchID, stats))
+
+		case errors.Is(err, dotaapi.ErrRealtimeUnavailable):
+			unavailable++
+			log.Printf("[%s] LIVE PROBE match %s: server unavailable (%d/%d)", b.name, matchID, unavailable, liveProbeMaxUnavailable)
+			if unavailable >= liveProbeMaxUnavailable {
+				log.Printf("[%s] LIVE PROBE stopping for match %s: server is gone", b.name, matchID)
+				return
+			}
+
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			log.Printf("[%s] LIVE PROBE stopping for match %s: %v", b.name, matchID, err)
+			return
+
+		default:
+			log.Printf("[%s] LIVE PROBE match %s: %v", b.name, matchID, err)
+		}
+
+		select {
+		case <-probeCtx.Done():
+			log.Printf("[%s] LIVE PROBE stopping for match %s", b.name, matchID)
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func formatRealtimeStats(matchID string, stats *dotaapi.RealtimeStats) string {
+	m := stats.Match
+
+	heroes := stats.HeroesByAccountID()
+	accountIDs := make([]uint32, 0, len(heroes))
+	for accountID := range heroes {
+		accountIDs = append(accountIDs, accountID)
+	}
+	sort.Slice(accountIDs, func(i, j int) bool { return accountIDs[i] < accountIDs[j] })
+
+	heroPairs := make([]string, 0, len(accountIDs))
+	for _, accountID := range accountIDs {
+		heroPairs = append(heroPairs, fmt.Sprintf("%d=%d", accountID, heroes[accountID]))
+	}
+
+	return fmt.Sprintf(
+		"match=%s dota_match_id=%d game_state=%v game_time=%d mode=%d lobby_type=%d league=%d picked=%d/%d picks=%s bans=%s heroes=[%s]",
+		matchID,
+		m.MatchID,
+		protocol.DOTA_GameState(m.GameState), //nolint:gosec // enum is uint32 on the wire
+		m.GameTime,
+		m.GameMode,
+		m.LobbyType,
+		m.LeagueID,
+		stats.PickedCount(),
+		len(heroes),
+		formatPickBans(m.Picks),
+		formatPickBans(m.Bans),
+		strings.Join(heroPairs, ", "),
+	)
+}
+
+// formatPickBans renders the draft in the order Valve returned it, as
+// hero:team pairs, so we can see whether order and team attribution survive.
+func formatPickBans(entries []dotaapi.PickBan) string {
+	if len(entries) == 0 {
+		return "none"
+	}
+	parts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		parts = append(parts, fmt.Sprintf("%d:%d", e.Hero, e.Team))
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func formatLobbyHeroIDs(dota2Lobby *protocol.CSODOTALobby) string {

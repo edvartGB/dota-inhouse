@@ -36,6 +36,8 @@ type Manager struct {
 type Config struct {
 	Bots    []BotCredentials
 	BaseURL string
+	// SteamAPIKey enables the live match data probe. Optional.
+	SteamAPIKey string
 }
 
 // BotCredentials holds login credentials for a single bot.
@@ -57,7 +59,7 @@ func NewManager(cfg Config, commands chan<- coordinator.Command) *Manager {
 	for _, cred := range cfg.Bots {
 		if cred.Username != "" && cred.Password != "" {
 			initialDelay := time.Duration(len(m.bots)) * BotStartupInterval
-			bot := NewBot(cred.Username, cred.Password, initialDelay)
+			bot := NewBot(cred.Username, cred.Password, initialDelay, cfg.SteamAPIKey)
 			m.bots = append(m.bots, bot)
 			log.Printf("Bot initialized: %s", cred.Username)
 		}
