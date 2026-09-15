@@ -6,6 +6,7 @@
 
 {{define "side-choice-panel"}}
 {{$chooser := index .Captains .SideChooserIndex}}
+{{$other := index .Captains (sub 1 .SideChooserIndex)}}
 {{$isChooser := eq .UserID $chooser.SteamID}}
 <div id="side-choice" class="draft-panel">
     <h3>Choose Side</h3>
@@ -26,19 +27,15 @@
         </div>
 
         <div class="available">
-            <h4>Available Players</h4>
+            <h4>Players</h4>
             <ul class="player-list">
-                {{range .AvailablePlayers}}
-                    <li class="player">{{.Name}}</li>
+                {{range priorityOrder .Captains .AvailablePlayers}}
+                    <li class="player{{if or (eq .SteamID $chooser.SteamID) (eq .SteamID $other.SteamID)}} captain{{end}}">
+                        <span class="player-name">{{.Name}}</span>
+                        {{if or (eq .SteamID $chooser.SteamID) (eq .SteamID $other.SteamID)}}<span class="captain-badge">C</span>{{end}}
+                    </li>
                 {{end}}
             </ul>
-            <p class="side-choice-status">
-                {{if $isChooser}}
-                    Pick the side you want to captain.
-                {{else}}
-                    Waiting for {{$chooser.Name}} to choose a side...
-                {{end}}
-            </p>
         </div>
 
         <div class="team dire">

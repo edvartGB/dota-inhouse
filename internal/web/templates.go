@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
@@ -54,6 +55,18 @@ func templateFuncs() template.FuncMap {
 		},
 		"getPlayerName": func(p coordinator.Player) string {
 			return p.Name
+		},
+		// priorityOrder returns the two captains plus the remaining players,
+		// sorted by descending CaptainPriority, for phases that want to show
+		// the whole roster in the order captains were selected from.
+		"priorityOrder": func(captains [2]coordinator.Player, available []coordinator.Player) []coordinator.Player {
+			all := make([]coordinator.Player, 0, 2+len(available))
+			all = append(all, captains[0], captains[1])
+			all = append(all, available...)
+			sort.SliceStable(all, func(i, j int) bool {
+				return all[i].CaptainPriority > all[j].CaptainPriority
+			})
+			return all
 		},
 		// sideChoiceData lets the full page render the same side-choice panel the SSE updates use.
 		"sideChoiceData": func(match *coordinator.Match, userID string) SideChoiceData {

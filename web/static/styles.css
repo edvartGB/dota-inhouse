@@ -934,7 +934,8 @@ main {
     border-radius: 4px;
 }
 
-.history-match .player.captain {
+.history-match .player.captain,
+.draft-panel .player.captain {
     border: 1px solid var(--accent-primary);
 }
 
@@ -1293,12 +1294,5 @@ main {
     display: block;
     width: 100%;
     margin-top: 0.5rem;
-}
-
-.side-choice-status {
-    margin-top: 0.75rem;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    text-align: center;
 }
 
