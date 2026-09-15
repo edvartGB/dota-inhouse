@@ -56,6 +56,16 @@ type Match struct {
 	PickCount          int      // Number of picks made (used for timeout validation)
 	DotaMatchID        uint64
 	GameStartedAt      *time.Time
+	// Heroes maps Steam64 id to the hero that player is on in the live game.
+	// Nil until the bot reports a draft. A player missing from the map has no
+	// hero yet, which is the normal state during a draft.
+	Heroes map[string]int32
+}
+
+// HeroID returns the live hero for a player, or 0 if they have none yet.
+// Templates call this so a nil map is not a special case at the call site.
+func (m *Match) HeroID(steamID string) int32 {
+	return m.Heroes[steamID]
 }
 
 type LobbySettings struct {

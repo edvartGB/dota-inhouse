@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/dota"
 )
 
 func gameModeName(gameMode string) string {
@@ -116,6 +117,12 @@ func templateFuncs() template.FuncMap {
 			m := *seconds / 60
 			s := *seconds % 60
 			return fmt.Sprintf("%d:%02d", m, s)
+		},
+		// heroName and heroPortrait both return "" for an unpicked or unknown
+		// hero, which templates use to decide whether to show art at all.
+		"heroName": dota.Name,
+		"heroPortrait": func(id int32) string {
+			return dota.PortraitURL(id)
 		},
 		"remainingSeconds": func(d time.Duration) int {
 			if d <= 0 {

@@ -74,6 +74,16 @@ type BotGameEnded struct {
 
 func (BotGameEnded) command() {}
 
+// BotLiveHeroesUpdated carries the heroes the bot observed in the live game,
+// keyed by Steam64 id. Only sent when the set actually changes, so it is safe
+// to treat every one of these as a reason to re-render.
+type BotLiveHeroesUpdated struct {
+	MatchID string
+	Heroes  map[string]int32
+}
+
+func (BotLiveHeroesUpdated) command() {}
+
 type SideChoiceTimeout struct {
 	MatchID string
 }

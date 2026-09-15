@@ -112,6 +112,17 @@
     </div>
 {{end}}
 
+{{/*
+    hero-portrait takes a hero id. Id 0 means the player has no hero yet, which
+    is the normal state before and during a draft, so nothing is rendered. An
+    id Valve has added but this build does not know also yields no URL and is
+    treated the same way.
+*/}}
+{{define "hero-portrait"}}
+    {{$url := heroPortrait .}}
+    {{if $url}}<img src="{{$url}}" alt="{{heroName .}}" title="{{heroName .}}" class="hero-portrait" loading="lazy" decoding="async">{{end}}
+{{end}}
+
 {{define "active-matches"}}
 <div id="active-matches" class="matches-panel" hx-swap-oob="true">
     <h3>Active Matches ({{len .Matches}})</h3>
@@ -120,6 +131,7 @@
     {{else}}
         <ul class="match-list">
             {{range .Matches}}
+                {{$m := .}}
                 <li class="match-item {{.State | matchStateClass}}">
                     <span class="match-status-badge">{{.State | matchStateName}}</span>
                     {{if and (eq .State 4) .GameStartedAt}}
@@ -132,7 +144,7 @@
                             <h4>Radiant</h4>
                             <ul class="active-match-player-list">
                                 {{range .Radiant}}
-                                    <li class="active-match-player">{{.Name}}</li>
+                                    <li class="active-match-player">{{template "hero-portrait" ($m.HeroID .SteamID)}}<span class="active-match-player-name">{{.Name}}</span></li>
                                 {{else}}
                                     <li class="active-match-player empty-team">No picks yet</li>
                                 {{end}}
@@ -143,7 +155,7 @@
                             <h4>Dire</h4>
                             <ul class="active-match-player-list">
                                 {{range .Dire}}
-                                    <li class="active-match-player">{{.Name}}</li>
+                                    <li class="active-match-player">{{template "hero-portrait" ($m.HeroID .SteamID)}}<span class="active-match-player-name">{{.Name}}</span></li>
                                 {{else}}
                                     <li class="active-match-player empty-team">No picks yet</li>
                                 {{end}}

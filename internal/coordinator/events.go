@@ -134,6 +134,15 @@ type MatchStarted struct {
 
 func (MatchStarted) event() {}
 
+// LiveHeroesUpdated means the heroes in an in-progress match changed. The
+// heroes themselves live on the Match, so consumers re-render from state
+// rather than reading them off the event.
+type LiveHeroesUpdated struct {
+	MatchID string
+}
+
+func (LiveHeroesUpdated) event() {}
+
 type MatchCompleted struct {
 	MatchID     string
 	DotaMatchID uint64

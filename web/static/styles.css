@@ -347,6 +347,25 @@ main {
     color: var(--text-primary);
     line-height: 1.25;
     overflow-wrap: anywhere;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 1.5rem;
+}
+
+.active-match-player-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Valve serves these portraits at a 16:9 aspect ratio. */
+.hero-portrait {
+    width: 2.25rem;
+    height: 1.265rem;
+    flex-shrink: 0;
+    border-radius: 2px;
+    object-fit: cover;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
 }
 
 .active-match-team-dire .active-match-player {
@@ -1282,3 +1301,4 @@ main {
     font-size: 0.85rem;
     text-align: center;
 }
+

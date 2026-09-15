@@ -86,6 +86,7 @@ func (h *SSEHub) isMatchEvent(event coordinator.Event) bool {
 		coordinator.LobbyCountdownPaused,
 		coordinator.LobbyCountdownResumed,
 		coordinator.MatchStarted,
+		coordinator.LiveHeroesUpdated,
 		coordinator.MatchCompleted:
 		return true
 	default:

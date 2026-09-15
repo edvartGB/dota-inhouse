@@ -157,6 +157,8 @@ func (c *Coordinator) handleCommand(cmd Command) {
 		c.handleBotGameStarted(cmd)
 	case BotGameEnded:
 		c.handleBotGameEnded(cmd)
+	case BotLiveHeroesUpdated:
+		c.handleBotLiveHeroesUpdated(cmd)
 	case SideChoiceTimeout:
 		c.handleSideChoiceTimeout(cmd)
 	case DraftPickTimeout:
@@ -773,6 +775,25 @@ func (c *Coordinator) handleBotGameStarted(cmd BotGameStarted) {
 		Dire:        match.Dire,
 		Captains:    match.Captains,
 	})
+}
+
+func (c *Coordinator) handleBotLiveHeroesUpdated(cmd BotLiveHeroesUpdated) {
+	match := c.state.GetMatch(cmd.MatchID)
+	if match == nil {
+		return
+	}
+
+	// A late sample can arrive after the match has been torn down or moved on;
+	// applying it would resurrect hero art on a finished match.
+	if match.State != MatchStateInProgress {
+		return
+	}
+
+	match.Heroes = cmd.Heroes
+
+	log.Printf("Match %s live heroes updated (%d players)", cmd.MatchID, len(cmd.Heroes))
+
+	c.emit(LiveHeroesUpdated{MatchID: cmd.MatchID})
 }
 
 func (c *Coordinator) handleBotGameEnded(cmd BotGameEnded) {

@@ -697,7 +697,7 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 	lastRunHeroLogKey := ""
 	runHeroSnapshotLogged := false
 	lastGameState := protocol.DOTA_GameState(-1)
-	serverProbeLogged := false
+	heroTrackingStarted := false
 
 	timeoutLobby := func(reason string) {
 		joinedCorrectly := b.getCorrectlyJoinedPlayers(currentLobby, expectedTeam)
@@ -811,9 +811,9 @@ lobbyTimerReady:
 			currentLobby = dota2Lobby // Update tracked lobby state
 			currentState := dota2Lobby.GetState()
 
-			if !serverProbeLogged && dota2Lobby.GetServerId() != 0 {
-				serverProbeLogged = true
-				b.startLiveDataProbe(ctx, dota2Lobby, matchID)
+			if !heroTrackingStarted && dota2Lobby.GetServerId() != 0 {
+				heroTrackingStarted = true
+				b.startLiveHeroTracking(ctx, dota2Lobby, matchID, commands)
 			}
 
 			if gameState := dota2Lobby.GetGameState(); gameState != lastGameState {
@@ -1003,79 +1003,120 @@ const (
 	liveProbeMaxUnavailable = 3
 )
 
-// startLiveDataProbe logs the identifiers needed to evaluate live hero-pick
-// sources, then polls GetRealtimeStats for the life of the match. It only
-// logs; nothing is persisted or sent to the coordinator.
-func (b *Bot) startLiveDataProbe(ctx context.Context, dota2Lobby *protocol.CSODOTALobby, matchID string) {
+// steamIDBase converts a 32-bit Dota account id to a Steam64 id, which is how
+// players are keyed everywhere else in this app.
+const steamIDBase = 76561197960265728
+
+// startLiveHeroTracking begins polling Valve for the heroes in a live game and
+// reporting them to the coordinator. server_id comes off the lobby object and
+// is populated as early as SERVERSETUP, before the game starts loading.
+func (b *Bot) startLiveHeroTracking(ctx context.Context, dota2Lobby *protocol.CSODOTALobby, matchID string, commands chan<- coordinator.Command) {
 	serverID := dota2Lobby.GetServerId()
 
 	log.Printf(
-		"[%s] LIVE PROBE match=%s lobby_id=%d server_id=%d dota_match_id=%d lobby_state=%v game_state=%v",
-		b.name,
-		matchID,
-		dota2Lobby.GetLobbyId(),
-		serverID,
-		dota2Lobby.GetMatchId(),
-		dota2Lobby.GetState(),
-		dota2Lobby.GetGameState(),
+		"[%s] Live hero tracking for match %s: lobby_id=%d server_id=%d dota_match_id=%d",
+		b.name, matchID, dota2Lobby.GetLobbyId(), serverID, dota2Lobby.GetMatchId(),
 	)
 
-	// Gameserver SteamIDs observed from Valve's live APIs all fall in the
-	// 90xxxxxxxxxxxxxxx range. Anything else means server_id is not what
-	// GetRealtimeStats wants.
+	// Gameserver SteamIDs all fall in the 90xxxxxxxxxxxxxxx range. Anything
+	// else means server_id is not the id GetRealtimeStats wants, and polling
+	// would just burn requests on 400s.
 	if serverID < 90000000000000000 || serverID > 91000000000000000 {
-		log.Printf("[%s] LIVE PROBE server_id=%d is outside the expected gameserver SteamID range, not polling", b.name, serverID)
+		log.Printf("[%s] server_id=%d is outside the gameserver SteamID range, not tracking heroes", b.name, serverID)
 		return
 	}
 
 	if b.realtime == nil {
-		log.Printf("[%s] LIVE PROBE skipping poll for match %s: no Steam API key configured", b.name, matchID)
+		log.Printf("[%s] Not tracking heroes for match %s: no Steam API key configured", b.name, matchID)
 		return
 	}
 
-	go b.pollRealtimeStats(ctx, serverID, matchID)
+	go b.pollRealtimeStats(ctx, serverID, matchID, commands)
 }
 
-func (b *Bot) pollRealtimeStats(ctx context.Context, serverID uint64, matchID string) {
-	probeCtx, cancel := context.WithTimeout(ctx, liveProbeMaxDuration)
+// pollRealtimeStats samples the live game until it ends, sending the hero
+// lineup to the coordinator whenever it changes.
+func (b *Bot) pollRealtimeStats(ctx context.Context, serverID uint64, matchID string, commands chan<- coordinator.Command) {
+	pollCtx, cancel := context.WithTimeout(ctx, liveProbeMaxDuration)
 	defer cancel()
 
 	ticker := time.NewTicker(liveProbeInterval)
 	defer ticker.Stop()
 
-	log.Printf("[%s] LIVE PROBE polling GetRealtimeStats for match %s every %v", b.name, matchID, liveProbeInterval)
-
 	unavailable := 0
+	lastKey := ""
+
 	for {
-		stats, err := b.realtime.GetRealtimeStats(probeCtx, serverID)
+		stats, err := b.realtime.GetRealtimeStats(pollCtx, serverID)
 		switch {
 		case err == nil:
 			unavailable = 0
-			log.Printf("[%s] LIVE PROBE %s", b.name, formatRealtimeStats(matchID, stats))
+			heroes := heroesBySteamID(stats)
+			// The lineup is static for most of a match, so only log and
+			// notify on change. Logging every sample buried the interesting
+			// transitions under hundreds of identical lines.
+			if key := heroKey(heroes); key != lastKey {
+				lastKey = key
+				log.Printf("[%s] %s", b.name, formatRealtimeStats(matchID, stats))
+				select {
+				case commands <- coordinator.BotLiveHeroesUpdated{MatchID: matchID, Heroes: heroes}:
+				case <-pollCtx.Done():
+					return
+				}
+			}
 
 		case errors.Is(err, dotaapi.ErrRealtimeUnavailable):
+			// Valve answers 400 both before the server is ready and after it
+			// is deallocated, so tolerate a few before concluding the match is
+			// over. The first call after server_id appears is normally a 400.
 			unavailable++
-			log.Printf("[%s] LIVE PROBE match %s: server unavailable (%d/%d)", b.name, matchID, unavailable, liveProbeMaxUnavailable)
 			if unavailable >= liveProbeMaxUnavailable {
-				log.Printf("[%s] LIVE PROBE stopping for match %s: server is gone", b.name, matchID)
+				log.Printf("[%s] Stopping hero tracking for match %s: server is gone", b.name, matchID)
 				return
 			}
 
 		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-			log.Printf("[%s] LIVE PROBE stopping for match %s: %v", b.name, matchID, err)
 			return
 
 		default:
-			log.Printf("[%s] LIVE PROBE match %s: %v", b.name, matchID, err)
+			log.Printf("[%s] Live hero poll for match %s: %v", b.name, matchID, err)
 		}
 
 		select {
-		case <-probeCtx.Done():
-			log.Printf("[%s] LIVE PROBE stopping for match %s", b.name, matchID)
+		case <-pollCtx.Done():
 			return
 		case <-ticker.C:
 		}
 	}
+}
+
+// heroesBySteamID converts Valve's account-id-keyed heroes to Steam64 keys,
+// dropping players who have not picked yet (hero id 0).
+func heroesBySteamID(stats *dotaapi.RealtimeStats) map[string]int32 {
+	heroes := make(map[string]int32)
+	for accountID, heroID := range stats.HeroesByAccountID() {
+		if heroID <= 0 {
+			continue
+		}
+		steamID := uint64(accountID) + steamIDBase
+		heroes[strconv.FormatUint(steamID, 10)] = heroID
+	}
+	return heroes
+}
+
+// heroKey is a stable fingerprint of a hero lineup, used to detect change.
+func heroKey(heroes map[string]int32) string {
+	steamIDs := make([]string, 0, len(heroes))
+	for steamID := range heroes {
+		steamIDs = append(steamIDs, steamID)
+	}
+	sort.Strings(steamIDs)
+
+	parts := make([]string, 0, len(steamIDs))
+	for _, steamID := range steamIDs {
+		parts = append(parts, fmt.Sprintf("%s=%d", steamID, heroes[steamID]))
+	}
+	return strings.Join(parts, ",")
 }
 
 func formatRealtimeStats(matchID string, stats *dotaapi.RealtimeStats) string {
