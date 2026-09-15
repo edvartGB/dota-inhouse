@@ -137,6 +137,9 @@ func templateFuncs() template.FuncMap {
 		"heroPortrait": func(id int32) string {
 			return dota.PortraitURL(id)
 		},
+		// gameClockLabel returns "" until the bot's first live sample
+		// arrives, so templates fall back to the wall-clock estimate.
+		"gameClockLabel": dota.GameClockLabel,
 		"remainingSeconds": func(d time.Duration) int {
 			if d <= 0 {
 				return 0

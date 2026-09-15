@@ -790,8 +790,12 @@ func (c *Coordinator) handleBotLiveHeroesUpdated(cmd BotLiveHeroesUpdated) {
 	}
 
 	match.Heroes = cmd.Heroes
+	match.HeroLevels = cmd.Levels
+	match.LiveGameState = cmd.GameState
+	match.LiveGameTime = cmd.GameTime
 
-	log.Printf("Match %s live heroes updated (%d players)", cmd.MatchID, len(cmd.Heroes))
+	log.Printf("Match %s live heroes updated (%d players, game_state=%d game_time=%d)",
+		cmd.MatchID, len(cmd.Heroes), cmd.GameState, cmd.GameTime)
 
 	c.emit(LiveHeroesUpdated{MatchID: cmd.MatchID})
 }

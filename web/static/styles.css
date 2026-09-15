@@ -235,32 +235,42 @@ main {
     list-style: none;
 }
 
-.match-item {
-    padding: 0.75rem;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
+.match-card {
+    padding: 1rem 1.1rem 1.1rem;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
     background: var(--bg-tertiary);
     border-left: 3px solid var(--border-color);
 }
 
-.match-item.state-accepting {
+.match-card.state-accepting {
     border-left-color: #f0ad4e;
 }
 
-.match-item.state-drafting {
+.match-card.state-drafting {
     border-left-color: var(--accent-primary);
 }
 
-.match-item.state-choosing {
+.match-card.state-choosing {
     border-left: 4px solid var(--accent-primary);
 }
 
-.match-item.state-waiting {
+.match-card.state-waiting {
     border-left-color: #5bc0de;
 }
 
-.match-item.state-ingame {
+.match-card.state-ingame {
     border-left-color: #5cb85c;
+}
+
+.match-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .match-status-badge {
@@ -270,15 +280,41 @@ main {
     font-size: 0.75rem;
     font-weight: bold;
     text-transform: uppercase;
-    margin-bottom: 0.5rem;
     background: var(--bg-primary);
 }
 
-.match-elapsed {
-    display: inline-block;
-    margin-left: 0.4rem;
+.match-clock {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.match-clock.text-muted {
     color: var(--text-secondary);
+    font-weight: 400;
     font-size: 0.8rem;
+}
+
+.live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #5cb85c;
+    animation: match-live-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .live-dot {
+        animation: none;
+    }
+}
+
+@keyframes match-live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
 }
 
 .match-elapsed-large {
@@ -309,78 +345,160 @@ main {
     margin: 0 0.25rem;
 }
 
-.active-match-teams {
+.scoreboard {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 0.6rem;
-    align-items: start;
+    gap: 0 0.85rem;
 }
 
-.active-match-team {
+.scoreboard-divider {
+    width: 1px;
+    background: var(--border-color);
+}
+
+.side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
     min-width: 0;
 }
 
-.active-match-team h4 {
-    margin-bottom: 0.35rem;
-    font-size: 0.75rem;
+.side-head {
+    font-size: 0.7rem;
+    font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    margin-bottom: 0.1rem;
 }
 
-.active-match-team-radiant h4 {
+.side-radiant .side-head {
     color: var(--accent-radiant);
 }
 
-.active-match-team-dire h4 {
+.side-dire .side-head {
     color: var(--accent-dire);
     text-align: right;
 }
 
-.active-match-player-list {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.active-match-player {
-    color: var(--text-primary);
-    line-height: 1.25;
-    overflow-wrap: anywhere;
+.player-row {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    min-height: 1.5rem;
-}
-
-.active-match-player-name {
+    gap: 0.5rem;
     min-width: 0;
-    overflow-wrap: anywhere;
 }
 
-/* Valve serves these portraits at a 16:9 aspect ratio. */
-.hero-portrait {
-    width: 2.25rem;
-    height: 1.265rem;
-    flex-shrink: 0;
-    border-radius: 2px;
-    object-fit: cover;
-    background: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
-}
-
-.active-match-team-dire .active-match-player {
+.side-dire .player-row {
+    flex-direction: row-reverse;
     text-align: right;
 }
 
-.active-match-player.empty-team {
+/* Valve serves these portraits at a 16:9 aspect ratio. The background stays
+   on the slot itself, not the image, so an unpicked hero still shows a
+   visible placeholder box instead of rendering as nothing at all. */
+.hero-slot {
+    position: relative;
+    flex-shrink: 0;
+    width: 2.75rem;
+    height: 1.545rem;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.hero-portrait {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 3px;
+    object-fit: cover;
+}
+
+.hero-slot-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+.hero-level {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 4px;
+    background: var(--bg-primary);
+    border: 1px solid var(--bg-tertiary);
+    font-size: 0.6rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.side-dire .hero-level {
+    right: auto;
+    left: -4px;
+}
+
+.player-names {
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.player-name {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hero-name {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-row.empty-team {
     color: var(--text-secondary);
     font-style: italic;
 }
 
-.active-match-teams .vs {
-    align-self: start;
-    margin: 1.45rem 0 0;
-    font-size: 0.75rem;
+@media (max-width: 600px) {
+    .scoreboard {
+        grid-template-columns: 1fr;
+    }
+    .scoreboard-divider {
+        display: none;
+    }
+    .side-dire {
+        order: 2;
+    }
+    .side-dire .player-row {
+        flex-direction: row;
+        text-align: left;
+    }
+    .side-dire .side-head {
+        text-align: left;
+    }
+    .side-dire .hero-level {
+        right: -4px;
+        left: auto;
+    }
+    .side-radiant {
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.1rem;
+    }
 }
 
 /* Draft Panel */

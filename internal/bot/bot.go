@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/dota"
 	"github.com/edvart/dota-inhouse/internal/dotaapi"
 	"github.com/golang/protobuf/proto"
 	"github.com/paralin/go-dota2"
@@ -993,8 +994,7 @@ func (b *Bot) getCorrectlyJoinedPlayers(dota2Lobby *protocol.CSODOTALobby, expec
 	return correct
 }
 
-// Live data probe tuning. Temporary: remove along with the probe once we know
-// whether lobby server_id feeds GetRealtimeStats.
+// Live hero/clock tracking tuning.
 const (
 	liveProbeInterval    = 10 * time.Second
 	liveProbeMaxDuration = 2 * time.Hour
@@ -1052,14 +1052,25 @@ func (b *Bot) pollRealtimeStats(ctx context.Context, serverID uint64, matchID st
 		case err == nil:
 			unavailable = 0
 			heroes := heroesBySteamID(stats)
-			// The lineup is static for most of a match, so only log and
-			// notify on change. Logging every sample buried the interesting
-			// transitions under hundreds of identical lines.
-			if key := heroKey(heroes); key != lastKey {
+			levels := levelsBySteamID(stats)
+			gameState := int32(stats.Match.GameState) //nolint:gosec // enum is uint32 on the wire
+			gameTime := stats.Match.GameTime
+			// The lineup and phase are static for most of a match, so only log
+			// and notify on change. Once there's a real clock to show
+			// (pre-game onward), game time is folded into the key too, so
+			// this naturally updates every poll while the clock is ticking,
+			// which also keeps hero level current since it rides along.
+			if key := liveUpdateKey(heroes, gameState, gameTime); key != lastKey {
 				lastKey = key
 				log.Printf("[%s] %s", b.name, formatRealtimeStats(matchID, stats))
 				select {
-				case commands <- coordinator.BotLiveHeroesUpdated{MatchID: matchID, Heroes: heroes}:
+				case commands <- coordinator.BotLiveHeroesUpdated{
+					MatchID:   matchID,
+					Heroes:    heroes,
+					Levels:    levels,
+					GameState: gameState,
+					GameTime:  gameTime,
+				}:
 				case <-pollCtx.Done():
 					return
 				}
@@ -1104,6 +1115,22 @@ func heroesBySteamID(stats *dotaapi.RealtimeStats) map[string]int32 {
 	return heroes
 }
 
+// levelsBySteamID mirrors heroesBySteamID for hero level, since
+// RealtimeStats has no flattened accessor for it like HeroesByAccountID.
+func levelsBySteamID(stats *dotaapi.RealtimeStats) map[string]int32 {
+	levels := make(map[string]int32)
+	for _, team := range stats.Teams {
+		for _, player := range team.Players {
+			if player.HeroID <= 0 {
+				continue
+			}
+			steamID := uint64(player.AccountID) + steamIDBase
+			levels[strconv.FormatUint(steamID, 10)] = int32(player.Level) //nolint:gosec // hero level fits comfortably in an int32
+		}
+	}
+	return levels
+}
+
 // heroKey is a stable fingerprint of a hero lineup, used to detect change.
 func heroKey(heroes map[string]int32) string {
 	steamIDs := make([]string, 0, len(heroes))
@@ -1117,6 +1144,19 @@ func heroKey(heroes map[string]int32) string {
 		parts = append(parts, fmt.Sprintf("%s=%d", steamID, heroes[steamID]))
 	}
 	return strings.Join(parts, ",")
+}
+
+// liveUpdateKey is a stable fingerprint of what's worth notifying the
+// coordinator about: the hero lineup and the match phase, plus the game
+// clock once there's one worth showing. Excluding game time before pre-game
+// keeps hero selection and strategy time from generating an update every
+// poll despite nothing changing on screen.
+func liveUpdateKey(heroes map[string]int32, gameState int32, gameTime int32) string {
+	key := heroKey(heroes) + fmt.Sprintf("|state=%d", gameState)
+	if gameState >= dota.GameStatePreGame {
+		key += fmt.Sprintf("|time=%d", gameTime)
+	}
+	return key
 }
 
 func formatRealtimeStats(matchID string, stats *dotaapi.RealtimeStats) string {

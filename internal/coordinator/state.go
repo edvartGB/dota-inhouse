@@ -60,12 +60,26 @@ type Match struct {
 	// Nil until the bot reports a draft. A player missing from the map has no
 	// hero yet, which is the normal state during a draft.
 	Heroes map[string]int32
+	// HeroLevels maps Steam64 id to that player's current hero level.
+	HeroLevels map[string]int32
+	// LiveGameState and LiveGameTime mirror Valve's own game state/clock for
+	// an in-progress match. LiveGameState is 0 until the bot's first live
+	// sample arrives.
+	LiveGameState int32
+	LiveGameTime  int32
 }
 
 // HeroID returns the live hero for a player, or 0 if they have none yet.
 // Templates call this so a nil map is not a special case at the call site.
 func (m *Match) HeroID(steamID string) int32 {
 	return m.Heroes[steamID]
+}
+
+// HeroLevel returns the live hero level for a player, or 0 if they have no
+// hero yet. Templates call this so a nil map is not a special case at the
+// call site.
+func (m *Match) HeroLevel(steamID string) int32 {
+	return m.HeroLevels[steamID]
 }
 
 type LobbySettings struct {
