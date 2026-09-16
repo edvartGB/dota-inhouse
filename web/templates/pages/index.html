@@ -8,7 +8,6 @@
         <div class="main-layout">
             <div class="sidebar">
                 {{template "queue" .}}
-                {{template "active-matches" .}}
             </div>
 
             <div id="match-area">
@@ -77,6 +76,8 @@
                 {{end}}
             </div>
         </div>
+
+        {{template "active-matches" .}}
 
         <div hx-ext="sse" sse-connect="/events">
             <div sse-swap="message" style="display:none;"></div>

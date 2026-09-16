@@ -219,6 +219,17 @@ main {
     background: var(--bg-secondary);
     border-radius: 8px;
     padding: 1.5rem;
+    margin-top: 2rem;
+}
+
+/* Only cap the width for exactly one match, so it doesn't stretch across the
+   whole row. `fit-content` is unreliable here: a flex child can report a
+   shrunk intrinsic size well below its own max-width, so cap explicitly at
+   the card's max-width (640px) plus the panel's own horizontal padding
+   instead of trying to shrink-wrap. Left at auto for 2+ matches, where the
+   flex row is meant to fill the available width. */
+.matches-panel.single-match {
+    max-width: calc(640px + 3rem);
 }
 
 .matches-panel h3 {
@@ -233,12 +244,16 @@ main {
 
 .match-list {
     list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .match-card {
+    flex: 1 1 480px;
+    max-width: 640px;
     padding: 1rem 1.1rem 1.1rem;
     border-radius: 8px;
-    margin-bottom: 0.75rem;
     background: var(--bg-tertiary);
     border-left: 3px solid var(--border-color);
 }
