@@ -120,11 +120,11 @@
 */}}
 {{define "hero-portrait"}}
     {{$url := heroPortrait .}}
-    {{if $url}}<img src="{{$url}}" alt="{{heroName .}}" title="{{heroName .}}" class="hero-portrait" loading="lazy" decoding="async">{{end}}
+    {{if $url}}<img src="{{$url}}" alt="{{heroName .}}" title="{{heroName .}}" class="hero-portrait">{{end}}
 {{end}}
 
 {{define "active-matches"}}
-<div id="active-matches" class="matches-panel{{if eq (len .Matches) 1}} single-match{{end}}" hx-swap-oob="true">
+<div id="active-matches" class="matches-panel{{if eq (len .Matches) 1}} single-match{{end}}" hx-swap-oob="morph">
     <h3>Active Matches ({{len .Matches}})</h3>
     {{if eq (len .Matches) 0}}
         <p class="no-matches">No active matches</p>
@@ -132,7 +132,7 @@
         <ul class="match-list">
             {{range .Matches}}
                 {{$m := .}}
-                <li class="match-card {{.State | matchStateClass}}">
+                <li id="match-card-{{.ID}}" class="match-card {{.State | matchStateClass}}">
                     <div class="match-card-head">
                         <span class="match-status-badge">{{.State | matchStateName}}</span>
                         {{if eq .State 4}}
@@ -155,7 +155,7 @@
                             {{range .Radiant}}
                                 {{$heroID := $m.HeroID .SteamID}}
                                 {{$heroLabel := heroName $heroID}}
-                                <div class="player-row">
+                                <div id="player-row-{{$m.ID}}-{{.SteamID}}" class="player-row">
                                     <div class="hero-slot">
                                         {{template "hero-portrait" $heroID}}
                                         {{if $heroLabel}}
@@ -168,6 +168,13 @@
                                         <span class="player-name" title="{{.Name}}">{{.Name}}</span>
                                         {{if $heroLabel}}<span class="hero-name">{{$heroLabel}}</span>{{end}}
                                     </div>
+                                    {{if $heroLabel}}
+                                        {{$stats := $m.PlayerStats .SteamID}}
+                                        <div class="player-stats">
+                                            <span class="player-kda" title="Kills / Deaths / Assists">{{$stats.Kills}}/{{$stats.Deaths}}/{{$stats.Assists}}</span>
+                                            <span class="player-net-worth" title="Net worth">{{netWorth $stats.NetWorth}}</span>
+                                        </div>
+                                    {{end}}
                                 </div>
                             {{else}}
                                 <div class="player-row empty-team">No picks yet</div>
@@ -179,7 +186,7 @@
                             {{range .Dire}}
                                 {{$heroID := $m.HeroID .SteamID}}
                                 {{$heroLabel := heroName $heroID}}
-                                <div class="player-row">
+                                <div id="player-row-{{$m.ID}}-{{.SteamID}}" class="player-row">
                                     <div class="hero-slot">
                                         {{template "hero-portrait" $heroID}}
                                         {{if $heroLabel}}
@@ -192,6 +199,13 @@
                                         <span class="player-name" title="{{.Name}}">{{.Name}}</span>
                                         {{if $heroLabel}}<span class="hero-name">{{$heroLabel}}</span>{{end}}
                                     </div>
+                                    {{if $heroLabel}}
+                                        {{$stats := $m.PlayerStats .SteamID}}
+                                        <div class="player-stats">
+                                            <span class="player-kda" title="Kills / Deaths / Assists">{{$stats.Kills}}/{{$stats.Deaths}}/{{$stats.Assists}}</span>
+                                            <span class="player-net-worth" title="Net worth">{{netWorth $stats.NetWorth}}</span>
+                                        </div>
+                                    {{end}}
                                 </div>
                             {{else}}
                                 <div class="player-row empty-team">No picks yet</div>

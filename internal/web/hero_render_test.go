@@ -109,3 +109,26 @@ func TestActiveMatchesIgnoresUnknownHeroID(t *testing.T) {
 		t.Error("emitted an image with an empty src")
 	}
 }
+
+func TestActiveMatchesRendersKDAAndNetWorth(t *testing.T) {
+	match := inProgressMatch(map[string]int32{
+		"76561198267552506": 74,
+		"76561197988574788": 21,
+	})
+	match.Stats = map[string]coordinator.PlayerStats{
+		"76561198267552506": {Kills: 11, Deaths: 2, Assists: 9, NetWorth: 29921},
+		"76561197988574788": {Kills: 0, Deaths: 4, Assists: 3, NetWorth: 850},
+	}
+
+	html := renderActiveMatchesPanel(t, []*coordinator.Match{match})
+
+	for _, want := range []string{"11/2/9", "29.9k", "0/4/3", ">850<"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("rendered panel missing %q", want)
+		}
+	}
+
+	if got := strings.Count(html, `class="player-stats"`); got != 2 {
+		t.Errorf("got %d stat blocks, want 2 (the player without a hero gets none)", got)
+	}
+}

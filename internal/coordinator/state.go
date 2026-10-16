@@ -62,6 +62,7 @@ type Match struct {
 	Heroes map[string]int32
 	// HeroLevels maps Steam64 id to that player's current hero level.
 	HeroLevels map[string]int32
+	Stats      map[string]PlayerStats
 	// LiveGameState and LiveGameTime mirror Valve's own game state/clock for
 	// an in-progress match. LiveGameState is 0 until the bot's first live
 	// sample arrives.
@@ -82,6 +83,16 @@ func (m *Match) HeroLevel(steamID string) int32 {
 	return m.HeroLevels[steamID]
 }
 
+type PlayerStats struct {
+	Kills    int32
+	Deaths   int32
+	Assists  int32
+	NetWorth int32
+}
+
+func (m *Match) PlayerStats(steamID string) PlayerStats {
+	return m.Stats[steamID]
+}
 type LobbySettings struct {
 	GameMode string `json:"gameMode"` // "cm", "ap", "cd", "rd", "ar"
 	LeagueID uint32 `json:"leagueId"` // 0 means no league

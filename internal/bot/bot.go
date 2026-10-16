@@ -1053,6 +1053,7 @@ func (b *Bot) pollRealtimeStats(ctx context.Context, serverID uint64, matchID st
 			unavailable = 0
 			heroes := heroesBySteamID(stats)
 			levels := levelsBySteamID(stats)
+			playerStats := statsBySteamID(stats)
 			gameState := int32(stats.Match.GameState) //nolint:gosec // enum is uint32 on the wire
 			gameTime := stats.Match.GameTime
 			// The lineup and phase are static for most of a match, so only log
@@ -1068,6 +1069,7 @@ func (b *Bot) pollRealtimeStats(ctx context.Context, serverID uint64, matchID st
 					MatchID:   matchID,
 					Heroes:    heroes,
 					Levels:    levels,
+					Stats:     playerStats,
 					GameState: gameState,
 					GameTime:  gameTime,
 				}:
@@ -1129,6 +1131,25 @@ func levelsBySteamID(stats *dotaapi.RealtimeStats) map[string]int32 {
 		}
 	}
 	return levels
+}
+
+func statsBySteamID(stats *dotaapi.RealtimeStats) map[string]coordinator.PlayerStats {
+	result := make(map[string]coordinator.PlayerStats)
+	for _, team := range stats.Teams {
+		for _, player := range team.Players {
+			if player.HeroID <= 0 {
+				continue
+			}
+			steamID := uint64(player.AccountID) + steamIDBase
+			result[strconv.FormatUint(steamID, 10)] = coordinator.PlayerStats{
+				Kills:    int32(player.KillCount),    //nolint:gosec // match stat counts fit comfortably in an int32
+				Deaths:   int32(player.DeathCount),   //nolint:gosec // match stat counts fit comfortably in an int32
+				Assists:  int32(player.AssistsCount), //nolint:gosec // match stat counts fit comfortably in an int32
+				NetWorth: int32(player.NetWorth),     //nolint:gosec // net worth fits comfortably in an int32
+			}
+		}
+	}
+	return result
 }
 
 // heroKey is a stable fingerprint of a hero lineup, used to detect change.

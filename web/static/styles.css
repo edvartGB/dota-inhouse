@@ -13,6 +13,7 @@
     --accent-primary: #4a9eff;
     --accent-radiant: #92a525;
     --accent-dire: #c23c2a;
+    --accent-gold: #e6b422;
     --accent-danger: #dc3545;
     --border-color: #333;
 }
@@ -461,8 +462,33 @@ main {
 }
 
 .player-names {
+    flex: 1 1 auto;
     min-width: 0;
     line-height: 1.3;
+}
+
+.player-stats {
+    flex-shrink: 0;
+    line-height: 1.3;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.side-dire .player-stats {
+    text-align: left;
+}
+
+.player-kda {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+}
+
+.player-net-worth {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--accent-gold);
 }
 
 .player-name {
@@ -508,6 +534,9 @@ main {
     .side-dire .hero-level {
         right: -4px;
         left: auto;
+    }
+    .side-dire .player-stats {
+        text-align: right;
     }
     .side-radiant {
         border-bottom: 1px solid var(--border-color);

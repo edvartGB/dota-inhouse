@@ -123,6 +123,12 @@ func templateFuncs() template.FuncMap {
 			}
 			return *v
 		},
+		"netWorth": func(gold int32) string {
+			if gold < 1000 {
+				return fmt.Sprintf("%d", gold)
+			}
+			return fmt.Sprintf("%.1fk", float64(gold)/1000)
+		},
 		"formatDuration": func(seconds *int) string {
 			if seconds == nil {
 				return ""

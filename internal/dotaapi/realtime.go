@@ -81,11 +81,15 @@ type RealtimeMatch struct {
 }
 
 type RealtimePlayer struct {
-	AccountID uint32 `json:"accountid"`
-	Name      string `json:"name"`
-	Team      uint32 `json:"team"`
-	HeroID    int32  `json:"heroid"`
-	Level     uint32 `json:"level"`
+	AccountID    uint32 `json:"accountid"`
+	Name         string `json:"name"`
+	Team         uint32 `json:"team"`
+	HeroID       int32  `json:"heroid"`
+	Level        uint32 `json:"level"`
+	KillCount    uint32 `json:"kill_count"`
+	DeathCount   uint32 `json:"death_count"`
+	AssistsCount uint32 `json:"assists_count"`
+	NetWorth     uint32 `json:"net_worth"`
 }
 
 type RealtimeTeam struct {

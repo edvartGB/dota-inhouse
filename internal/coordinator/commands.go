@@ -82,6 +82,7 @@ type BotLiveHeroesUpdated struct {
 	MatchID   string
 	Heroes    map[string]int32
 	Levels    map[string]int32
+	Stats     map[string]PlayerStats
 	GameState int32
 	GameTime  int32
 }

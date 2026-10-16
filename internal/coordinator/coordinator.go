@@ -15,8 +15,8 @@ import (
 var MaxPlayers = 10
 
 const (
-	MatchAcceptTimeoutDur = 60 * time.Second
-	SideChoiceTimeoutDur  = 60 * time.Second
+	MatchAcceptTimeoutDur = 30 * time.Second
+	SideChoiceTimeoutDur  = 30 * time.Second
 	DraftPickTimeoutDur   = 60 * time.Second
 	LobbyJoinTimeoutDur   = 5 * time.Minute
 )
@@ -791,6 +791,7 @@ func (c *Coordinator) handleBotLiveHeroesUpdated(cmd BotLiveHeroesUpdated) {
 
 	match.Heroes = cmd.Heroes
 	match.HeroLevels = cmd.Levels
+	match.Stats = cmd.Stats
 	match.LiveGameState = cmd.GameState
 	match.LiveGameTime = cmd.GameTime
 
