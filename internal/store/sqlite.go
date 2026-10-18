@@ -104,6 +104,7 @@ func (s *SQLiteStore) migrate() error {
 	// Run optional migrations that may fail (e.g., adding columns that might already exist)
 	optionalMigrations := []string{
 		`ALTER TABLE matches ADD COLUMN duration INTEGER`,
+		`ALTER TABLE users ADD COLUMN banned_until TIMESTAMP`,
 	}
 	for _, m := range optionalMigrations {
 		s.db.Exec(m) // Ignore errors - column may already exist
@@ -152,17 +153,21 @@ func isSQLiteBusy(err error) bool {
 
 func (s *SQLiteStore) GetUser(ctx context.Context, steamID string) (*User, error) {
 	var user User
+	var bannedUntil sql.NullTime
 	err := s.db.QueryRowContext(ctx,
-		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at
+		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at, banned_until
 		 FROM users WHERE steam_id = ?`, steamID).Scan(
 		&user.SteamID, &user.Name, &user.AvatarURL,
-		&user.CaptainPriority, &user.CreatedAt, &user.UpdatedAt,
+		&user.CaptainPriority, &user.CreatedAt, &user.UpdatedAt, &bannedUntil,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if bannedUntil.Valid {
+		user.BannedUntil = &bannedUntil.Time
 	}
 	return &user, nil
 }
@@ -202,7 +207,7 @@ func (s *SQLiteStore) UpdateUserProfile(ctx context.Context, steamID, displayNam
 
 func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at
+		`SELECT steam_id, name, avatar_url, captain_priority, created_at, updated_at, banned_until
 		 FROM users ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -212,12 +217,34 @@ func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.SteamID, &u.Name, &u.AvatarURL, &u.CaptainPriority, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		var bannedUntil sql.NullTime
+		if err := rows.Scan(&u.SteamID, &u.Name, &u.AvatarURL, &u.CaptainPriority, &u.CreatedAt, &u.UpdatedAt, &bannedUntil); err != nil {
 			return nil, err
+		}
+		if bannedUntil.Valid {
+			t := bannedUntil.Time
+			u.BannedUntil = &t
 		}
 		users = append(users, u)
 	}
 	return users, rows.Err()
+}
+
+func (s *SQLiteStore) SetBannedUntil(ctx context.Context, steamID string, until *time.Time) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE users SET banned_until = ?, updated_at = ? WHERE steam_id = ?`,
+		until, time.Now(), steamID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
 }
 
 func (s *SQLiteStore) UpdateCaptainPriority(ctx context.Context, steamID string, priority int) error {

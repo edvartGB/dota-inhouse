@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -134,29 +135,30 @@ func (s *Server) handleAdminMatchesPage(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Server) handleAdminCaptainsPage(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdminPlayersPage(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	users, err := s.store.ListUsers(r.Context())
 	if err != nil {
 		log.Printf("Failed to list users: %v", err)
 	}
 
-	sortBy, sortDir := sanitizeAdminCaptainSort(r.URL.Query().Get("sort"), r.URL.Query().Get("dir"))
-	sortAdminCaptainUsers(users, sortBy, sortDir)
+	sortBy, sortDir := sanitizeAdminPlayerSort(r.URL.Query().Get("sort"), r.URL.Query().Get("dir"))
+	sortAdminPlayers(users, sortBy, sortDir)
 
 	data := map[string]interface{}{
 		"User":    user,
 		"Users":   users,
 		"SortBy":  sortBy,
 		"SortDir": sortDir,
+		"Now":     time.Now(),
 	}
 
-	if err := s.templates.ExecuteTemplate(w, "admin-captains.html", data); err != nil {
+	if err := s.templates.ExecuteTemplate(w, "admin-players.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func sanitizeAdminCaptainSort(sortBy, sortDir string) (string, string) {
+func sanitizeAdminPlayerSort(sortBy, sortDir string) (string, string) {
 	sortBy = strings.ToLower(strings.TrimSpace(sortBy))
 	sortDir = strings.ToLower(strings.TrimSpace(sortDir))
 
@@ -173,7 +175,7 @@ func sanitizeAdminCaptainSort(sortBy, sortDir string) (string, string) {
 	return sortBy, sortDir
 }
 
-func sortAdminCaptainUsers(users []store.User, sortBy, sortDir string) {
+func sortAdminPlayers(users []store.User, sortBy, sortDir string) {
 	sort.SliceStable(users, func(i, j int) bool {
 		a := users[i]
 		b := users[j]
@@ -487,6 +489,62 @@ func (s *Server) handleAdminSetCaptainPriority(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	w.WriteHeader(http.StatusNoContent)
+}
+
+var banDurations = map[string]time.Duration{
+	"1d":  24 * time.Hour,
+	"3d":  3 * 24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+	"30d": 30 * 24 * time.Hour,
+}
+
+func banExpiry(duration string, now time.Time) (time.Time, error) {
+	if duration == "indefinite" {
+		return store.IndefiniteBan, nil
+	}
+	d, ok := banDurations[duration]
+	if !ok {
+		return time.Time{}, errors.New("duration must be one of 1d, 3d, 7d, 30d, indefinite")
+	}
+	return now.Add(d), nil
+}
+
+func (s *Server) handleAdminBanPlayer(w http.ResponseWriter, r *http.Request) {
+	playerID := chi.URLParam(r, "playerID")
+	if playerID == "" {
+		http.Error(w, "player ID required", http.StatusBadRequest)
+		return
+	}
+
+	until, err := banExpiry(r.FormValue("duration"), time.Now())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.SetBannedUntil(r.Context(), playerID, &until); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Admin banned player %s until %s", playerID, until.Format(time.RFC3339))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAdminUnbanPlayer(w http.ResponseWriter, r *http.Request) {
+	playerID := chi.URLParam(r, "playerID")
+	if playerID == "" {
+		http.Error(w, "player ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.SetBannedUntil(r.Context(), playerID, nil); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Admin unbanned player %s", playerID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

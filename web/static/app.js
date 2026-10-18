@@ -336,6 +336,15 @@ document.body.addEventListener('htmx:beforeRequest', function(event) {
 
 document.body.addEventListener('htmx:afterRequest', function(event) {
     const elt = event.detail && event.detail.elt;
+    if (!elt || elt.id !== 'join-btn' || event.detail.successful) return;
+    const xhr = event.detail.xhr;
+    if (xhr && xhr.status === 403 && xhr.responseText) {
+        alert(xhr.responseText.trim());
+    }
+});
+
+document.body.addEventListener('htmx:afterRequest', function(event) {
+    const elt = event.detail && event.detail.elt;
     if (!elt || elt.id !== 'accept-btn') return;
 
     if (event.detail && event.detail.successful) {

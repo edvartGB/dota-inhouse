@@ -12,6 +12,17 @@ type User struct {
 	CaptainPriority int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	BannedUntil     *time.Time
+}
+
+var IndefiniteBan = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+
+func (u User) IsBanned(now time.Time) bool {
+	return u.BannedUntil != nil && now.Before(*u.BannedUntil)
+}
+
+func (u User) IsBannedIndefinitely() bool {
+	return u.BannedUntil != nil && !u.BannedUntil.Before(IndefiniteBan)
 }
 
 type Session struct {
@@ -53,6 +64,7 @@ type Store interface {
 	UpdateUserProfile(ctx context.Context, steamID, displayName string) error
 	ListUsers(ctx context.Context) ([]User, error)
 	UpdateCaptainPriority(ctx context.Context, steamID string, priority int) error
+	SetBannedUntil(ctx context.Context, steamID string, until *time.Time) error
 
 	CreateSession(ctx context.Context, session *Session) error
 	GetSession(ctx context.Context, sessionID string) (*Session, error)

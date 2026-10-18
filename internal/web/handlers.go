@@ -8,10 +8,21 @@ import (
 
 	"github.com/edvart/dota-inhouse/internal/auth"
 	"github.com/edvart/dota-inhouse/internal/coordinator"
+	"github.com/edvart/dota-inhouse/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
 const handlerTimeout = 10 * time.Second
+
+func banMessage(user *store.User, now time.Time) string {
+	if !user.IsBanned(now) {
+		return ""
+	}
+	if user.IsBannedIndefinitely() {
+		return "You are banned indefinitely"
+	}
+	return "You are banned until " + user.BannedUntil.Local().Format("2 Jan 15:04")
+}
 
 // waitForResponse waits for a response with a timeout.
 func waitForResponse(resp <-chan error) error {
@@ -27,6 +38,11 @@ func (s *Server) handleJoinQueue(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if msg := banMessage(user, time.Now()); msg != "" {
+		http.Error(w, msg, http.StatusForbidden)
 		return
 	}
 

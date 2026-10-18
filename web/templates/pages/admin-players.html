@@ -1,10 +1,10 @@
-{{define "admin-captains.html"}}
+{{define "admin-players.html"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Captains - Dota Inhouse</title>
+    <title>Admin Players - Dota Inhouse</title>
     <link rel="stylesheet" href="/static/styles.css">
     <style>
         .admin-section { background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
@@ -14,13 +14,16 @@
         .sort-link { color: var(--text-primary); text-decoration: none; }
         .sort-link:hover { color: var(--accent-primary); }
         .sort-indicator { color: var(--text-secondary); margin-left: 0.3rem; font-size: 0.85em; }
-        .priority-select { padding:0.3rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); width:60px; }
+        .priority-select, .ban-select { padding:0.3rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); }
+        .priority-select { width:60px; }
+        .ban-cell { display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; }
+        .ban-status { color: var(--accent-dire); font-weight: 600; }
         .empty-state { color: var(--text-secondary); font-style: italic; padding: 1rem; }
     </style>
 </head>
 <body>
     <header>
-        <h1>Admin Captain Priorities</h1>
+        <h1>Admin Players</h1>
         <nav>
             <a href="/" class="nav-link">Queue</a>
             <a href="/history" class="nav-link">History</a>
@@ -40,23 +43,24 @@
                     <thead>
                         <tr>
                             <th>
-                                <a class="sort-link" href="/admin/captains?sort=name&dir={{if and (eq .SortBy "name") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
+                                <a class="sort-link" href="/admin/players?sort=name&dir={{if and (eq .SortBy "name") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
                                     Player
                                     <span class="sort-indicator">{{if eq .SortBy "name"}}{{if eq .SortDir "asc"}}▲{{else}}▼{{end}}{{else}}↕{{end}}</span>
                                 </a>
                             </th>
                             <th>
-                                <a class="sort-link" href="/admin/captains?sort=steamid&dir={{if and (eq .SortBy "steamid") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
+                                <a class="sort-link" href="/admin/players?sort=steamid&dir={{if and (eq .SortBy "steamid") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
                                     Steam ID
                                     <span class="sort-indicator">{{if eq .SortBy "steamid"}}{{if eq .SortDir "asc"}}▲{{else}}▼{{end}}{{else}}↕{{end}}</span>
                                 </a>
                             </th>
                             <th>
-                                <a class="sort-link" href="/admin/captains?sort=priority&dir={{if and (eq .SortBy "priority") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
+                                <a class="sort-link" href="/admin/players?sort=priority&dir={{if and (eq .SortBy "priority") (eq .SortDir "asc")}}desc{{else}}asc{{end}}">
                                     Captain Priority
                                     <span class="sort-indicator">{{if eq .SortBy "priority"}}{{if eq .SortDir "asc"}}▲{{else}}▼{{end}}{{else}}↕{{end}}</span>
                                 </a>
                             </th>
+                            <th>Ban</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -71,6 +75,23 @@
                                     <option value="{{add . 1}}" {{if eq (add . 1) $cp}}selected{{end}}>{{add . 1}}</option>
                                     {{end}}
                                 </select>
+                            </td>
+                            <td>
+                                <div class="ban-cell" data-steam-id="{{.SteamID}}" data-name="{{.Name}}">
+                                    {{if .IsBanned $.Now}}
+                                        <span class="ban-status">{{if .IsBannedIndefinitely}}Banned indefinitely{{else}}Banned until {{.BannedUntil.Local.Format "2 Jan 15:04"}}{{end}}</span>
+                                        <button class="btn btn-secondary btn-small" onclick="unbanPlayer(this)">Unban</button>
+                                    {{else}}
+                                        <select class="ban-select">
+                                            <option value="1d">1 day</option>
+                                            <option value="3d">3 days</option>
+                                            <option value="7d">1 week</option>
+                                            <option value="30d">30 days</option>
+                                            <option value="indefinite">Indefinite</option>
+                                        </select>
+                                        <button class="btn btn-danger btn-small" onclick="banPlayer(this)">Ban</button>
+                                    {{end}}
+                                </div>
                             </td>
                         </tr>
                         {{end}}
@@ -92,6 +113,36 @@
                     }
                 })
                 .catch(function(err) { alert('Error: ' + err); });
+        }
+
+        function postAndReload(url, body) {
+            fetch(url, { method: 'POST', body: body })
+                .then(function(resp) {
+                    if (!resp.ok) {
+                        resp.text().then(function(t) { alert('Error: ' + t); });
+                        return;
+                    }
+                    window.location.reload();
+                })
+                .catch(function(err) { alert('Error: ' + err); });
+        }
+
+        function banPlayer(button) {
+            var cell = button.closest('.ban-cell');
+            var select = cell.querySelector('.ban-select');
+            var label = select.options[select.selectedIndex].text;
+            var message = select.value === 'indefinite'
+                ? 'Ban ' + cell.dataset.name + ' indefinitely?'
+                : 'Ban ' + cell.dataset.name + ' for ' + label + '?';
+            if (!confirm(message)) return;
+            var body = new URLSearchParams({ duration: select.value });
+            postAndReload('/admin/player/' + encodeURIComponent(cell.dataset.steamId) + '/ban', body);
+        }
+
+        function unbanPlayer(button) {
+            var cell = button.closest('.ban-cell');
+            if (!confirm('Unban ' + cell.dataset.name + '?')) return;
+            postAndReload('/admin/player/' + encodeURIComponent(cell.dataset.steamId) + '/unban');
         }
     </script>
 </body>
