@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"strings"
 )
@@ -46,7 +47,7 @@ func AdminMiddleware(cfg *AdminConfig, sessions *SessionManager) func(http.Handl
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userContextKey, user)))
 		})
 	}
 }

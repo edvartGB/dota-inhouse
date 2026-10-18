@@ -300,15 +300,6 @@ func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context) error {
 	return err
 }
 
-func (s *SQLiteStore) CreateMatch(ctx context.Context, match *Match) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO matches (id, dota_match_id, state, started_at, ended_at, winner, duration)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		match.ID, match.DotaMatchID, match.State, match.StartedAt, match.EndedAt, match.Winner, match.Duration,
-	)
-	return err
-}
-
 func (s *SQLiteStore) CreateMatchWithPlayers(ctx context.Context, match *Match, players []MatchPlayer) error {
 	return retrySQLiteBusy(ctx, func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
@@ -363,19 +354,6 @@ func (s *SQLiteStore) GetMatch(ctx context.Context, matchID string) (*Match, err
 		return nil, err
 	}
 	return &match, nil
-}
-
-func (s *SQLiteStore) AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO match_players (match_id, steam_id, team, was_captain, accepted)
-		 VALUES (?, ?, ?, ?, ?)`,
-		mp.MatchID, mp.SteamID, mp.Team, mp.WasCaptain, mp.Accepted,
-	)
-	return err
-}
-
-func (s *SQLiteStore) ListMatches(ctx context.Context, limit int) ([]Match, error) {
-	return s.ListMatchesPage(ctx, limit, 0)
 }
 
 func (s *SQLiteStore) ListMatchesPage(ctx context.Context, limit, offset int) ([]Match, error) {

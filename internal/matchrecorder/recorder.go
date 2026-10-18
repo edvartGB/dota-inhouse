@@ -75,7 +75,7 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 			w := details.Winner()
 			winner = &w
 			duration = &details.Duration
-			log.Printf("Match recorder: fetched OpenDota API details - winner: %s, duration: %s", w, details.DurationFormatted())
+			log.Printf("Match recorder: fetched OpenDota API details - winner: %s, duration: %d:%02d", w, details.Duration/60, details.Duration%60)
 		}
 	} else {
 		winner = e.Winner
@@ -98,7 +98,7 @@ func (r *Recorder) recordMatchCompleted(ctx context.Context, e coordinator.Match
 			Winner:      winner,
 			Duration:    duration,
 		}
-		players := buildMatchPlayers(e.MatchID, e.Radiant, e.Dire, [2]coordinator.Player{})
+		players := buildMatchPlayers(e.MatchID, e.Radiant, e.Dire, e.Captains)
 		if err := r.store.CreateMatchWithPlayers(ctx, match, players); err != nil {
 			log.Printf("Match recorder: failed to create completed match %s with %d players: %v", e.MatchID, len(players), err)
 			return

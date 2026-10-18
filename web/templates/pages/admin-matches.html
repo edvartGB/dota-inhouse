@@ -1,49 +1,14 @@
 {{define "admin-matches.html"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Matches - Dota Inhouse</title>
-    <script src="/static/vendor/htmx.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css">
-    <style>
-        .admin-section { background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
-        .admin-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        .state-badge { display:inline-block; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.8rem; font-weight:bold; text-transform:uppercase; }
-        .state-accepting { background:#f0ad4e22; color:#f0ad4e; }
-        .state-choosing { background:rgba(74,158,255,0.13); color:var(--accent-primary); }
-        .state-drafting { background:rgba(74,158,255,0.13); color:var(--accent-primary); }
-        .state-waiting { background:#5bc0de22; color:#5bc0de; }
-        .state-ingame { background:#5cb85c22; color:#5cb85c; }
-        .player-tag { display:inline-block; background:var(--bg-tertiary); padding:0.2rem 0.5rem; border-radius:4px; margin:0.1rem; font-size:0.85rem; }
-        .team-radiant { border-left:3px solid var(--accent-radiant); }
-        .team-dire { border-left:3px solid var(--accent-dire); }
-        .empty-state { color:var(--text-secondary); font-style:italic; padding:1rem; }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>Admin Active Matches</h1>
-        <nav>
-            <a href="/" class="nav-link">Queue</a>
-            <a href="/history" class="nav-link">History</a>
-            <a href="/leaderboard" class="nav-link">Leaderboard</a>
-            <a href="/profile" class="nav-link">Profile</a>
-            <a href="/admin" class="nav-link nav-link-active">Admin</a>
-            {{if .User}}<span class="user-info">{{.User.Name}}</span><a href="/auth/logout" class="btn btn-secondary">Logout</a>{{end}}
-        </nav>
-    </header>
-
-    <main>
+{{template "layout-start" (layout "Admin Matches" "/admin" .User true)}}
         <div class="container">
+            <h2 class="page-title">Admin Active Matches</h2>
             <div class="admin-section">
                 <h3>Active Matches ({{len .Matches}})</h3>
                 {{if .Matches}}
                 {{range $id, $match := .Matches}}
                 <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:1rem;">
-                        <div><strong>Match:</strong> <code>{{$id}}</code> <span class="state-badge state-{{matchStateClass $match.State}}">{{matchStateName $match.State}}</span></div>
+                        <div><strong>Match:</strong> <code>{{$id}}</code> <span class="state-badge {{matchStateClass $match.State}}">{{matchStateName $match.State}}</span></div>
                         <div class="admin-actions">
                             {{if eq $match.State 3}}
                                 {{if $match.LobbyPaused}}
@@ -86,13 +51,12 @@
                 {{end}}
             </div>
         </div>
-    </main>
+
 
     <script>
         document.body.addEventListener('htmx:afterRequest', function(evt) {
             if (evt.detail.successful) setTimeout(function() { window.location.reload(); }, 300);
         });
     </script>
-</body>
-</html>
+{{template "layout-end"}}
 {{end}}

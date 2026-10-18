@@ -93,6 +93,7 @@ type PlayerStats struct {
 func (m *Match) PlayerStats(steamID string) PlayerStats {
 	return m.Stats[steamID]
 }
+
 type LobbySettings struct {
 	GameMode string `json:"gameMode"` // "cm", "ap", "cd", "rd", "ar"
 	LeagueID uint32 `json:"leagueId"` // 0 means no league

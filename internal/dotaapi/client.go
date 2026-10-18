@@ -32,13 +32,9 @@ func NewClient() *Client {
 
 // MatchDetails contains the relevant match information from OpenDota.
 type MatchDetails struct {
-	MatchID      uint64 `json:"match_id"`
-	RadiantWin   bool   `json:"radiant_win"`
-	Duration     int    `json:"duration"` // Duration in seconds
-	StartTime    int64  `json:"start_time"`
-	GameMode     int    `json:"game_mode"`
-	RadiantScore int    `json:"radiant_score"`
-	DireScore    int    `json:"dire_score"`
+	MatchID    uint64 `json:"match_id"`
+	RadiantWin bool   `json:"radiant_win"`
+	Duration   int    `json:"duration"` // Duration in seconds
 }
 
 // GetMatchDetails fetches match details from OpenDota.
@@ -84,11 +80,4 @@ func (m *MatchDetails) Winner() string {
 		return "radiant"
 	}
 	return "dire"
-}
-
-// DurationFormatted returns the duration as a formatted string (e.g., "45:32").
-func (m *MatchDetails) DurationFormatted() string {
-	minutes := m.Duration / 60
-	seconds := m.Duration % 60
-	return fmt.Sprintf("%d:%02d", minutes, seconds)
 }

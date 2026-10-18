@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -51,21 +53,13 @@ func (h *SSEHub) broadcast(event coordinator.Event) {
 	}
 
 	for client := range h.clients {
-		html := h.renderEventForUser(event, client.UserID)
-
-		if html == "" && matchesHTML != "" {
-			html = matchesHTML
-		} else if html != "" && matchesHTML != "" {
-			html = html + matchesHTML
-		}
-
+		html := h.renderEventForUser(event, client.UserID) + matchesHTML
 		if html == "" {
 			continue
 		}
 		select {
 		case client.Channel <- html:
 		default:
-			// Client too slow, skip
 			log.Printf("Dropping message for slow client %s", client.ID)
 		}
 	}
@@ -76,7 +70,6 @@ func (h *SSEHub) isMatchEvent(event coordinator.Event) bool {
 	case coordinator.MatchAcceptStarted,
 		coordinator.MatchAcceptUpdated,
 		coordinator.SideChoiceStarted,
-		coordinator.SideChoiceUpdated,
 		coordinator.DraftStarted,
 		coordinator.DraftUpdated,
 		coordinator.MatchCancelled,
@@ -95,314 +88,165 @@ func (h *SSEHub) isMatchEvent(event coordinator.Event) bool {
 }
 
 func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) string {
-	var buf bytes.Buffer
-
 	switch e := event.(type) {
 	case coordinator.LobbySettingsUpdated:
-		queue, _, _, _ := h.coordinator.GetState()
-		inMatch := h.coordinator.GetPlayerMatch(userID) != nil
-		data := h.queuePanelData(queue, userID, inMatch)
-		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", data); err != nil {
-			log.Printf("Failed to render queue after lobby settings update: %v", err)
-			return ""
-		}
+		return h.renderCurrentQueuePanel(userID, h.inMatch(userID), false)
 
 	case coordinator.QueueUpdated:
-		inMatch := h.coordinator.GetPlayerMatch(userID) != nil
-		data := h.queuePanelData(e.Queue, userID, inMatch)
-		data.IncludeActions = e.ActionsForAll || containsString(e.ActionPlayerIDs, userID)
-		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", data); err != nil {
-			log.Printf("Failed to render queue: %v", err)
-			return ""
-		}
+		includeActions := e.ActionsForAll || (userID != "" && slices.Contains(e.ActionPlayerIDs, userID))
+		return h.renderQueuePanel(e.Queue, userID, h.inMatch(userID), includeActions)
 
 	case coordinator.MatchAcceptStarted:
-		// Only send to users in this match
-		if !isUserInMatch(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
-		data := struct {
-			MatchID      string
-			Players      []coordinator.Player
-			Accepted     map[string]bool
-			Deadline     string
-			Count        int
-			Total        int
-			UserID       string
-			UserAccepted bool
-		}{
-			MatchID:      e.MatchID,
-			Players:      e.Players,
-			Accepted:     make(map[string]bool),
-			Deadline:     e.Deadline.Format(time.RFC3339),
-			Count:        0,
-			Total:        coordinator.MaxPlayers,
-			UserID:       userID,
-			UserAccepted: false,
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "accept-dialog", data); err != nil {
-			log.Printf("Failed to render accept dialog: %v", err)
-			return ""
-		}
+		return h.renderMatchArea(&coordinator.Match{
+			ID:              e.MatchID,
+			State:           coordinator.MatchStateAccepting,
+			Players:         e.Players,
+			AcceptedPlayers: map[string]bool{},
+			AcceptDeadline:  e.Deadline,
+		}, userID)
 
 	case coordinator.MatchAcceptUpdated:
-		// Only send to users in the match (check via coordinator)
 		match := h.coordinator.GetPlayerMatch(userID)
 		if match == nil || match.ID != e.MatchID {
 			return ""
 		}
-		userAccepted := e.Accepted[userID]
-		data := struct {
-			MatchID      string
-			Players      []coordinator.Player
-			Accepted     map[string]bool
-			Count        int
-			Total        int
-			UserID       string
-			UserAccepted bool
-		}{
+		data := AcceptDialogData{
 			MatchID:      e.MatchID,
 			Players:      match.Players,
 			Accepted:     e.Accepted,
 			Count:        len(e.Accepted),
 			Total:        coordinator.MaxPlayers,
 			UserID:       userID,
-			UserAccepted: userAccepted,
+			UserAccepted: e.Accepted[userID],
 		}
-		if err := h.templates.ExecuteTemplate(&buf, "accept-status", data); err != nil {
-			log.Printf("Failed to render accept status: %v", err)
+		status := h.renderFragment("accept-status", data)
+		if status == "" || e.PlayerID != userID {
+			return status
+		}
+		button := h.renderFragment("accept-button", data)
+		if button == "" {
 			return ""
 		}
-
-		if e.PlayerID == userID {
-			if err := h.templates.ExecuteTemplate(&buf, "accept-button", data); err != nil {
-				log.Printf("Failed to render accept button: %v", err)
-				return ""
-			}
-		}
+		return status + button
 
 	case coordinator.SideChoiceStarted:
-		if !isUserInPlayers(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
-		data := SideChoiceData{
-			MatchID:          e.MatchID,
-			Captains:         e.Captains,
-			SideChooserIndex: e.SideChooserIndex,
-			AvailablePlayers: e.Available,
-			Deadline:         e.Deadline.Format(time.RFC3339),
-			UserID:           userID,
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "side-choice", data); err != nil {
-			log.Printf("Failed to render side choice: %v", err)
-			return ""
-		}
-
-	case coordinator.SideChoiceUpdated:
-		if !isUserInPlayers(userID, e.Players) {
-			return ""
-		}
-		data := SideChoiceData{
-			MatchID:          e.MatchID,
-			Captains:         e.Captains,
-			SideChooserIndex: e.SideChooserIndex,
-			AvailablePlayers: e.Available,
-			Deadline:         e.Deadline.Format(time.RFC3339),
-			UserID:           userID,
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "side-choice", data); err != nil {
-			log.Printf("Failed to render side choice update: %v", err)
-			return ""
-		}
+		return h.renderMatchArea(&coordinator.Match{
+			ID:                 e.MatchID,
+			State:              coordinator.MatchStateChoosingSide,
+			Captains:           e.Captains,
+			SideChooserIndex:   e.SideChooserIndex,
+			AvailablePlayers:   e.Available,
+			SideChoiceDeadline: e.Deadline,
+		}, userID)
 
 	case coordinator.DraftStarted:
-		// Only send to users in this match
-		if !isUserInPlayers(userID, e.Radiant) && !isUserInPlayers(userID, e.Dire) && !isUserInPlayers(userID, e.Available) {
+		if !hasPlayer(e.Radiant, userID) && !hasPlayer(e.Dire, userID) && !hasPlayer(e.Available, userID) {
 			return ""
 		}
-		data := DraftData{
-			MatchID:          e.MatchID,
+		return h.renderMatchArea(&coordinator.Match{
+			ID:               e.MatchID,
+			State:            coordinator.MatchStateDrafting,
 			Captains:         e.Captains,
 			Radiant:          e.Radiant,
 			Dire:             e.Dire,
 			AvailablePlayers: e.Available,
-			CurrentPicker:    0,
-			Deadline:         e.Deadline.Format(time.RFC3339),
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
-			log.Printf("Failed to render draft: %v", err)
-			return ""
-		}
+			PickDeadline:     e.Deadline,
+		}, userID)
 
 	case coordinator.DraftUpdated:
-		// Only send to users in this match
-		if !isUserInPlayers(userID, e.Radiant) && !isUserInPlayers(userID, e.Dire) && !isUserInPlayers(userID, e.AvailablePlayers) {
+		if !hasPlayer(e.Radiant, userID) && !hasPlayer(e.Dire, userID) && !hasPlayer(e.AvailablePlayers, userID) {
 			return ""
 		}
-		data := DraftData{
-			MatchID:          e.MatchID,
+		return h.renderMatchArea(&coordinator.Match{
+			ID:               e.MatchID,
+			State:            coordinator.MatchStateDrafting,
 			Captains:         e.Captains,
-			AvailablePlayers: e.AvailablePlayers,
 			Radiant:          e.Radiant,
 			Dire:             e.Dire,
+			AvailablePlayers: e.AvailablePlayers,
 			CurrentPicker:    e.CurrentPicker,
-			Deadline:         e.Deadline.Format(time.RFC3339),
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
-			log.Printf("Failed to render draft: %v", err)
-			return ""
-		}
+			PickDeadline:     e.Deadline,
+		}, userID)
 
 	case coordinator.MatchCancelled:
-		// Players are already returned to queue, so check they're not in a different match
 		match := h.coordinator.GetPlayerMatch(userID)
 		if match != nil && match.ID != e.MatchID {
-			return "" // User is in a different match
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "match-cancelled", e); err != nil {
-			log.Printf("Failed to render match cancelled: %v", err)
 			return ""
 		}
+		return h.renderFragment("match-cancelled", e)
 
 	case coordinator.DraftCancelled:
-		// Send to users who were returned to queue (everyone except failed captain)
-		wasInMatch := isUserInPlayers(userID, e.ReturnedToQueue) || e.FailedCaptain.SteamID == userID
-		if !wasInMatch {
+		returned := hasPlayer(e.ReturnedToQueue, userID)
+		if !returned && e.FailedCaptain.SteamID != userID {
 			return ""
 		}
-		if err := h.templates.ExecuteTemplate(&buf, "draft-cancelled", e); err != nil {
-			log.Printf("Failed to render draft cancelled: %v", err)
-			return ""
-		}
-		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _, _, _ := h.coordinator.GetState()
-			queueData := h.queuePanelData(queue, userID, false)
-			queueData.IncludeActions = true
-			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
-				log.Printf("Failed to render queue after draft cancelled: %v", err)
-			}
-		}
+		return h.renderWithQueue("draft-cancelled", e, userID, returned)
 
 	case coordinator.LobbyCancelled:
-		wasInMatch := isUserInPlayers(userID, e.ReturnedToQueue) || isUserInPlayers(userID, e.FailedPlayers)
-		if !wasInMatch {
+		returned := hasPlayer(e.ReturnedToQueue, userID)
+		if !returned && !hasPlayer(e.FailedPlayers, userID) {
 			return ""
 		}
-		if err := h.templates.ExecuteTemplate(&buf, "lobby-cancelled", e); err != nil {
-			log.Printf("Failed to render lobby cancelled: %v", err)
-			return ""
-		}
-		if isUserInPlayers(userID, e.ReturnedToQueue) {
-			queue, _, _, _ := h.coordinator.GetState()
-			queueData := h.queuePanelData(queue, userID, false)
-			queueData.IncludeActions = true
-			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
-				log.Printf("Failed to render queue after lobby cancelled: %v", err)
-			}
-		}
+		return h.renderWithQueue("lobby-cancelled", e, userID, returned)
 
 	case coordinator.RequestBotLobby:
-		// Only send to users in this match
-		if !isUserInPlayers(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
-		data := struct {
-			MatchID          string
-			Message          string
-			Deadline         string
-			Paused           bool
-			RemainingSeconds int
-		}{
-			MatchID:  e.MatchID,
-			Message:  "Waiting for Dota 2 lobby...",
-			Deadline: e.Deadline.Format(time.RFC3339),
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
-			log.Printf("Failed to render waiting: %v", err)
-			return ""
-		}
+		return h.renderMatchArea(&coordinator.Match{
+			ID:            e.MatchID,
+			State:         coordinator.MatchStateWaitingForBot,
+			LobbyDeadline: e.Deadline,
+		}, userID)
 
 	case coordinator.LobbyCountdownPaused:
-		if !isUserInPlayers(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
-		remainingSeconds := int(e.Remaining.Seconds())
-		if remainingSeconds < 0 {
-			remainingSeconds = 0
-		}
-		data := struct {
-			MatchID          string
-			Message          string
-			Deadline         string
-			Paused           bool
-			RemainingSeconds int
-		}{
-			MatchID:          e.MatchID,
-			Message:          "Waiting for Dota 2 lobby...",
-			Deadline:         time.Now().Add(e.Remaining).Format(time.RFC3339),
-			Paused:           true,
-			RemainingSeconds: remainingSeconds,
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
-			log.Printf("Failed to render paused lobby countdown: %v", err)
-			return ""
-		}
+		return h.renderMatchArea(&coordinator.Match{
+			ID:             e.MatchID,
+			State:          coordinator.MatchStateWaitingForBot,
+			LobbyDeadline:  time.Now().Add(e.Remaining),
+			LobbyPaused:    true,
+			LobbyRemaining: e.Remaining,
+		}, userID)
 
 	case coordinator.LobbyCountdownResumed:
-		if !isUserInPlayers(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
-		data := struct {
-			MatchID          string
-			Message          string
-			Deadline         string
-			Paused           bool
-			RemainingSeconds int
-		}{
-			MatchID:  e.MatchID,
-			Message:  "Waiting for Dota 2 lobby...",
-			Deadline: e.Deadline.Format(time.RFC3339),
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
-			log.Printf("Failed to render resumed lobby countdown: %v", err)
-			return ""
-		}
+		return h.renderMatchArea(&coordinator.Match{
+			ID:            e.MatchID,
+			State:         coordinator.MatchStateWaitingForBot,
+			LobbyDeadline: e.Deadline,
+		}, userID)
 
 	case coordinator.MatchStarted:
-		if !isUserInPlayers(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
-		data := struct {
-			MatchID     string
-			DotaMatchID uint64
-			StartedAt   string
-		}{
-			MatchID:     e.MatchID,
-			DotaMatchID: e.DotaMatchID,
-			StartedAt:   e.StartedAt.Format(time.RFC3339),
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "match-in-progress", data); err != nil {
-			log.Printf("Failed to render match in progress: %v", err)
-			return ""
-		}
+		startedAt := e.StartedAt
+		return h.renderMatchArea(&coordinator.Match{
+			ID:            e.MatchID,
+			State:         coordinator.MatchStateInProgress,
+			DotaMatchID:   e.DotaMatchID,
+			GameStartedAt: &startedAt,
+		}, userID)
 
 	case coordinator.MatchCompleted:
-		if !isUserInPlayers(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
-		if err := h.templates.ExecuteTemplate(&buf, "match-completed", e); err != nil {
-			log.Printf("Failed to render match completed: %v", err)
-			return ""
-		}
-		queue, _, _, _ := h.coordinator.GetState()
-		queueData := h.queuePanelData(queue, userID, false)
-		queueData.IncludeActions = true
-		if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
-			log.Printf("Failed to render queue after match completed: %v", err)
-		}
+		return h.renderWithQueue("match-completed", e, userID, true)
 
 	case coordinator.MatchCancelledByAdmin:
-		if !isUserInPlayers(userID, e.Players) {
+		if !hasPlayer(e.Players, userID) {
 			return ""
 		}
 		data := struct {
@@ -412,23 +256,27 @@ func (h *SSEHub) renderEventForUser(event coordinator.Event, userID string) stri
 			MatchID: e.MatchID,
 			Message: "Match was cancelled by admin.",
 		}
-		if err := h.templates.ExecuteTemplate(&buf, "admin-match-cancelled", data); err != nil {
-			log.Printf("Failed to render admin cancel: %v", err)
-			return ""
-		}
-		if e.ReturnedToQueue {
-			queue, _, _, _ := h.coordinator.GetState()
-			queueData := h.queuePanelData(queue, userID, false)
-			queueData.IncludeActions = true
-			if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
-				log.Printf("Failed to render queue after admin cancel: %v", err)
-			}
-		}
+		return h.renderWithQueue("admin-match-cancelled", data, userID, e.ReturnedToQueue)
 
 	default:
 		return ""
 	}
+}
 
+func (h *SSEHub) renderWithQueue(name string, data any, userID string, includeQueue bool) string {
+	html := h.renderFragment(name, data)
+	if html == "" || !includeQueue {
+		return html
+	}
+	return html + h.renderCurrentQueuePanel(userID, false, true)
+}
+
+func (h *SSEHub) renderFragment(name string, data any) string {
+	var buf bytes.Buffer
+	if err := h.templates.ExecuteTemplate(&buf, name, data); err != nil {
+		log.Printf("Failed to render %s: %v", name, err)
+		return ""
+	}
 	return buf.String()
 }
 
@@ -441,22 +289,50 @@ type QueuePanelData struct {
 	IncludeActions bool
 }
 
-func (h *SSEHub) queuePanelData(queue []coordinator.Player, userID string, inMatch bool) QueuePanelData {
+func (h *SSEHub) renderQueuePanel(queue []coordinator.Player, userID string, inMatch, includeActions bool) string {
 	_, _, lobbySettings, queueOpen := h.coordinator.GetState()
-	inQueue := false
-	for _, p := range queue {
-		if p.SteamID == userID {
-			inQueue = true
-			break
-		}
-	}
-	return QueuePanelData{
-		Queue:        queue,
-		InQueue:      inQueue,
-		InMatch:      inMatch,
-		QueueOpen:    queueOpen,
-		GameModeName: gameModeName(lobbySettings.GameMode),
-	}
+	return h.renderFragment("queue-sse", QueuePanelData{
+		Queue:          queue,
+		InQueue:        hasPlayer(queue, userID),
+		InMatch:        inMatch,
+		QueueOpen:      queueOpen,
+		GameModeName:   gameModeName(lobbySettings.GameMode),
+		IncludeActions: includeActions,
+	})
+}
+
+func (h *SSEHub) renderCurrentQueuePanel(userID string, inMatch, includeActions bool) string {
+	queue, _, _, _ := h.coordinator.GetState()
+	return h.renderQueuePanel(queue, userID, inMatch, includeActions)
+}
+
+func (h *SSEHub) inMatch(userID string) bool {
+	return h.coordinator.GetPlayerMatch(userID) != nil
+}
+
+type AcceptDialogData struct {
+	MatchID      string
+	Players      []coordinator.Player
+	Accepted     map[string]bool
+	Deadline     string
+	Count        int
+	Total        int
+	UserID       string
+	UserAccepted bool
+}
+
+type WaitingForBotData struct {
+	MatchID          string
+	Message          string
+	Deadline         string
+	Paused           bool
+	RemainingSeconds int
+}
+
+type MatchInProgressData struct {
+	MatchID     string
+	DotaMatchID uint64
+	StartedAt   string
 }
 
 type DraftData struct {
@@ -481,66 +357,32 @@ type SideChoiceData struct {
 func (h *SSEHub) renderInitialState(userID string) string {
 	queue, matches, _, _ := h.coordinator.GetState()
 
-	inMatch := h.coordinator.GetPlayerMatch(userID) != nil
-
-	matchList := make([]*coordinator.Match, 0, len(matches))
-	for _, m := range matches {
-		matchList = append(matchList, m)
-	}
-
-	var buf bytes.Buffer
-
-	queueData := h.queuePanelData(queue, userID, inMatch)
-	queueData.IncludeActions = true
-	if err := h.templates.ExecuteTemplate(&buf, "queue-sse", queueData); err != nil {
-		log.Printf("Failed to render initial queue: %v", err)
+	queueHTML := h.renderQueuePanel(queue, userID, h.inMatch(userID), true)
+	if queueHTML == "" {
 		return ""
 	}
-
-	matchesData := struct {
-		Matches []*coordinator.Match
-	}{Matches: matchList}
-	if err := h.templates.ExecuteTemplate(&buf, "active-matches", matchesData); err != nil {
-		log.Printf("Failed to render initial matches: %v", err)
+	matchesHTML := h.renderMatchList(matches)
+	if matchesHTML == "" {
 		return ""
 	}
-
-	if matchHTML := h.renderCurrentMatchArea(userID); matchHTML != "" {
-		buf.WriteString(matchHTML)
-	}
-
-	return buf.String()
+	return queueHTML + matchesHTML + h.renderCurrentMatchArea(userID)
 }
 
 func (h *SSEHub) renderCurrentMatchArea(userID string) string {
 	if userID == "" {
 		return ""
 	}
-
 	match := h.coordinator.GetPlayerMatch(userID)
 	if match == nil {
-		var buf bytes.Buffer
-		if err := h.templates.ExecuteTemplate(&buf, "empty-match-area", nil); err != nil {
-			log.Printf("Failed to render empty match area: %v", err)
-			return ""
-		}
-		return buf.String()
+		return h.renderFragment("empty-match-area", nil)
 	}
+	return h.renderMatchArea(match, userID)
+}
 
-	var buf bytes.Buffer
+func (h *SSEHub) renderMatchArea(match *coordinator.Match, userID string) string {
 	switch match.State {
 	case coordinator.MatchStateAccepting:
-		userAccepted := match.AcceptedPlayers[userID]
-		data := struct {
-			MatchID      string
-			Players      []coordinator.Player
-			Accepted     map[string]bool
-			Deadline     string
-			Count        int
-			Total        int
-			UserID       string
-			UserAccepted bool
-		}{
+		return h.renderFragment("accept-dialog", AcceptDialogData{
 			MatchID:      match.ID,
 			Players:      match.Players,
 			Accepted:     match.AcceptedPlayers,
@@ -548,29 +390,21 @@ func (h *SSEHub) renderCurrentMatchArea(userID string) string {
 			Count:        len(match.AcceptedPlayers),
 			Total:        coordinator.MaxPlayers,
 			UserID:       userID,
-			UserAccepted: userAccepted,
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "accept-dialog", data); err != nil {
-			log.Printf("Failed to render initial accept dialog: %v", err)
-			return ""
-		}
+			UserAccepted: match.AcceptedPlayers[userID],
+		})
 
 	case coordinator.MatchStateChoosingSide:
-		data := SideChoiceData{
+		return h.renderFragment("side-choice", SideChoiceData{
 			MatchID:          match.ID,
 			Captains:         match.Captains,
 			SideChooserIndex: match.SideChooserIndex,
 			AvailablePlayers: match.AvailablePlayers,
 			Deadline:         match.SideChoiceDeadline.Format(time.RFC3339),
 			UserID:           userID,
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "side-choice", data); err != nil {
-			log.Printf("Failed to render initial side choice: %v", err)
-			return ""
-		}
+		})
 
 	case coordinator.MatchStateDrafting:
-		data := DraftData{
+		return h.renderFragment("draft", DraftData{
 			MatchID:          match.ID,
 			Captains:         match.Captains,
 			AvailablePlayers: match.AvailablePlayers,
@@ -578,75 +412,41 @@ func (h *SSEHub) renderCurrentMatchArea(userID string) string {
 			Dire:             match.Dire,
 			CurrentPicker:    match.CurrentPicker,
 			Deadline:         match.PickDeadline.Format(time.RFC3339),
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "draft", data); err != nil {
-			log.Printf("Failed to render initial draft: %v", err)
-			return ""
-		}
+		})
 
 	case coordinator.MatchStateWaitingForBot:
-		remainingSeconds := int(match.LobbyRemaining.Seconds())
-		if remainingSeconds < 0 {
-			remainingSeconds = 0
-		}
-		data := struct {
-			MatchID          string
-			Message          string
-			Deadline         string
-			Paused           bool
-			RemainingSeconds int
-		}{
+		return h.renderFragment("waiting-for-bot", WaitingForBotData{
 			MatchID:          match.ID,
 			Message:          "Waiting for Dota 2 lobby...",
 			Deadline:         match.LobbyDeadline.Format(time.RFC3339),
 			Paused:           match.LobbyPaused,
-			RemainingSeconds: remainingSeconds,
-		}
-		if err := h.templates.ExecuteTemplate(&buf, "waiting-for-bot", data); err != nil {
-			log.Printf("Failed to render initial waiting state: %v", err)
-			return ""
-		}
+			RemainingSeconds: max(int(match.LobbyRemaining.Seconds()), 0),
+		})
 
 	case coordinator.MatchStateInProgress:
-		data := struct {
-			MatchID     string
-			DotaMatchID uint64
-			StartedAt   string
-		}{
+		data := MatchInProgressData{
 			MatchID:     match.ID,
 			DotaMatchID: match.DotaMatchID,
 		}
 		if match.GameStartedAt != nil {
 			data.StartedAt = match.GameStartedAt.Format(time.RFC3339)
 		}
-		if err := h.templates.ExecuteTemplate(&buf, "match-in-progress", data); err != nil {
-			log.Printf("Failed to render initial in-progress state: %v", err)
-			return ""
-		}
-	}
+		return h.renderFragment("match-in-progress", data)
 
-	return buf.String()
+	default:
+		return ""
+	}
 }
 
 func (h *SSEHub) renderActiveMatches() string {
 	_, matches, _, _ := h.coordinator.GetState()
+	return h.renderMatchList(matches)
+}
 
-	matchList := make([]*coordinator.Match, 0, len(matches))
-	for _, m := range matches {
-		matchList = append(matchList, m)
-	}
-
-	var buf bytes.Buffer
-	data := struct {
+func (h *SSEHub) renderMatchList(matches map[string]*coordinator.Match) string {
+	return h.renderFragment("active-matches", struct {
 		Matches []*coordinator.Match
-	}{Matches: matchList}
-
-	if err := h.templates.ExecuteTemplate(&buf, "active-matches", data); err != nil {
-		log.Printf("Failed to render active matches: %v", err)
-		return ""
-	}
-
-	return buf.String()
+	}{Matches: slices.Collect(maps.Values(matches))})
 }
 
 func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID string) {
@@ -723,42 +523,6 @@ func (h *SSEHub) HandleConnection(w http.ResponseWriter, r *http.Request, userID
 	}
 }
 
-func (h *SSEHub) SendToUser(userID string, html string) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	for client := range h.clients {
-		if client.UserID == userID {
-			select {
-			case client.Channel <- html:
-			default:
-			}
-			return
-		}
-	}
-}
-
-func isUserInMatch(userID string, players []coordinator.Player) bool {
-	return isUserInPlayers(userID, players)
-}
-
-func isUserInPlayers(userID string, players []coordinator.Player) bool {
-	for _, p := range players {
-		if p.SteamID == userID {
-			return true
-		}
-	}
-	return false
-}
-
-func containsString(values []string, needle string) bool {
-	if needle == "" {
-		return false
-	}
-	for _, value := range values {
-		if value == needle {
-			return true
-		}
-	}
-	return false
+func hasPlayer(players []coordinator.Player, userID string) bool {
+	return slices.ContainsFunc(players, func(p coordinator.Player) bool { return p.SteamID == userID })
 }

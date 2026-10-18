@@ -1,15 +1,17 @@
 package web
 
 import (
+	"cmp"
 	"fmt"
 	"html/template"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 	"github.com/edvart/dota-inhouse/internal/dota"
+	"github.com/edvart/dota-inhouse/internal/store"
 )
 
 func gameModeName(gameMode string) string {
@@ -22,9 +24,23 @@ func gameModeName(gameMode string) string {
 	return gameMode
 }
 
+const assetVersion = "6"
+
+type LayoutData struct {
+	Title   string
+	Active  string
+	User    *store.User
+	IsAdmin bool
+}
+
 // templateFuncs returns the common template functions.
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"assetVersion": func() string { return assetVersion },
+		"layout": func(title, active string, user any, isAdmin bool) LayoutData {
+			u, _ := user.(*store.User)
+			return LayoutData{Title: title, Active: active, User: u, IsAdmin: isAdmin}
+		},
 		"sub": func(a, b int) int {
 			return a - b
 		},
@@ -63,8 +79,8 @@ func templateFuncs() template.FuncMap {
 			all := make([]coordinator.Player, 0, 2+len(available))
 			all = append(all, captains[0], captains[1])
 			all = append(all, available...)
-			sort.SliceStable(all, func(i, j int) bool {
-				return all[i].CaptainPriority > all[j].CaptainPriority
+			slices.SortStableFunc(all, func(a, b coordinator.Player) int {
+				return cmp.Compare(b.CaptainPriority, a.CaptainPriority)
 			})
 			return all
 		},

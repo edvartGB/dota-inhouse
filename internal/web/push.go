@@ -46,31 +46,6 @@ func (s *Server) handleSubscribePush(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
-// handleUnsubscribePush handles push unsubscription
-func (s *Server) handleUnsubscribePush(w http.ResponseWriter, r *http.Request) {
-	user := auth.UserFromContext(r.Context())
-	if user == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	var req struct {
-		Endpoint string `json:"endpoint"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.store.DeletePushSubscription(r.Context(), req.Endpoint); err != nil {
-		http.Error(w, "Failed to delete subscription", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
-}
-
 // handleGetVAPIDPublicKey returns the VAPID public key for frontend
 func (s *Server) handleGetVAPIDPublicKey(w http.ResponseWriter, r *http.Request) {
 	if s.pushService == nil {

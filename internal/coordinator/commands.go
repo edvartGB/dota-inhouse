@@ -47,17 +47,10 @@ type ChooseSide struct {
 func (ChooseSide) command() {}
 
 type MatchAcceptTimeout struct {
-	MatchID   string
-	StartedAt time.Time
-}
-
-func (MatchAcceptTimeout) command() {}
-
-type BotLobbyReady struct {
 	MatchID string
 }
 
-func (BotLobbyReady) command() {}
+func (MatchAcceptTimeout) command() {}
 
 type BotGameStarted struct {
 	MatchID     string

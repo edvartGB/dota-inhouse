@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
@@ -11,10 +12,10 @@ import (
 )
 
 type Service struct {
-	store         store.Store
-	vapidPublic   string
-	vapidPrivate  string
-	vapidSubject  string
+	store        store.Store
+	vapidPublic  string
+	vapidPrivate string
+	vapidSubject string
 }
 
 const maxSubscriptionsPerUser = 3
@@ -89,7 +90,8 @@ func (s *Service) SendToUser(ctx context.Context, steamID string, payload Notifi
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
 
 		// If subscription is gone (410) or invalid (404), delete it
 		if resp.StatusCode == 410 || resp.StatusCode == 404 {

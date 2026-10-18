@@ -1,10 +1,7 @@
 // Package dota holds static Dota 2 reference data.
 package dota
 
-const (
-	portraitBase = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/"
-	iconBase     = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/icons/"
-)
+const portraitBase = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/"
 
 // hero is a hero's display name plus its asset slug, which is the
 // npc_dota_hero_ name with the prefix stripped.
@@ -161,14 +158,4 @@ func PortraitURL(id int32) string {
 		return ""
 	}
 	return portraitBase + h.slug + ".png"
-}
-
-// IconURL returns the hero's small square icon on Valve's CDN, or "" if the id
-// is unknown.
-func IconURL(id int32) string {
-	h, ok := heroes[id]
-	if !ok {
-		return ""
-	}
-	return iconBase + h.slug + ".png"
 }

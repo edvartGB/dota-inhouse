@@ -47,17 +47,6 @@ type SideChoiceStarted struct {
 
 func (SideChoiceStarted) event() {}
 
-type SideChoiceUpdated struct {
-	MatchID          string
-	Players          []Player
-	Captains         [2]Player
-	SideChooserIndex int
-	Available        []Player
-	Deadline         time.Time
-}
-
-func (SideChoiceUpdated) event() {}
-
 type DraftStarted struct {
 	MatchID   string
 	Captains  [2]Player
@@ -80,12 +69,6 @@ type DraftUpdated struct {
 }
 
 func (DraftUpdated) event() {}
-
-type PlayerFailedAccept struct {
-	PlayerID string
-}
-
-func (PlayerFailedAccept) event() {}
 
 type MatchCancelled struct {
 	MatchID       string
@@ -149,6 +132,7 @@ type MatchCompleted struct {
 	Players     []Player
 	Radiant     []Player
 	Dire        []Player
+	Captains    [2]Player
 	Winner      *string // "radiant", "dire", or nil if unknown
 }
 

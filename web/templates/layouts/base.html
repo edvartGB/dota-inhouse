@@ -1,10 +1,10 @@
-{{define "base"}}
+{{define "layout-start"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DNDL</title>
+    <title>{{with .Title}}{{.}} - {{end}}Den Norske Dota Ligaen</title>
     <meta name="description" content="Den Norske Dota Ligaen">
     <meta name="theme-color" content="#d32f2f">
 
@@ -24,17 +24,17 @@
     <script src="/static/vendor/htmx.min.js"></script>
     <script src="/static/vendor/htmx-sse.js"></script>
     <script src="/static/vendor/idiomorph-ext.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css?v=5">
+    <link rel="stylesheet" href="/static/styles.css?v={{assetVersion}}">
 </head>
 <body hx-ext="morph">
     <header>
         <h1>Den Norske Dota Ligaen</h1>
         <nav>
-            <a href="/" class="nav-link nav-link-active">Queue</a>
-            <a href="/history" class="nav-link">History</a>
-            <a href="/leaderboard" class="nav-link">Leaderboard</a>
-            <a href="/profile" class="nav-link">Profile</a>
-            {{if .IsAdmin}}<a href="/admin" class="nav-link">Admin</a>{{end}}
+            <a href="/" class="nav-link{{if eq .Active "/"}} nav-link-active{{end}}">Queue</a>
+            <a href="/history" class="nav-link{{if eq .Active "/history"}} nav-link-active{{end}}">History</a>
+            <a href="/leaderboard" class="nav-link{{if eq .Active "/leaderboard"}} nav-link-active{{end}}">Leaderboard</a>
+            <a href="/profile" class="nav-link{{if eq .Active "/profile"}} nav-link-active{{end}}">Profile</a>
+            {{if .IsAdmin}}<a href="/admin" class="nav-link{{if eq .Active "/admin"}} nav-link-active{{end}}">Admin</a>{{end}}
             {{if .User}}
                 <span class="user-info">{{.User.Name}}</span>
                 <a href="/auth/logout" class="btn btn-secondary">Logout</a>
@@ -45,10 +45,12 @@
     </header>
 
     <main>
-        {{template "content" .}}
+{{end}}
+
+{{define "layout-end"}}
     </main>
 
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v={{assetVersion}}"></script>
 </body>
 </html>
 {{end}}

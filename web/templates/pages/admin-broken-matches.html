@@ -1,44 +1,7 @@
 {{define "admin-broken-matches.html"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Broken Matches - Dota Inhouse</title>
-    <script src="/static/vendor/htmx.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css">
-    <style>
-        .admin-section { background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
-        .broken-match { background: var(--bg-tertiary); border: 1px solid #f0ad4e44; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
-        .broken-header { display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:0.75rem; }
-        .broken-meta { display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem; margin-bottom:0.75rem; }
-        .state-badge { display:inline-block; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.8rem; font-weight:bold; text-transform:uppercase; }
-        .state-ingame { background:#5cb85c22; color:#5cb85c; }
-        .missing-field { display:inline-block; border:1px solid #f0ad4e88; color:#f0ad4e; border-radius:999px; padding:0.1rem 0.5rem; font-size:0.75rem; }
-        .player-tag { display:inline-block; background:var(--bg-tertiary); padding:0.2rem 0.5rem; border-radius:4px; margin:0.1rem; font-size:0.85rem; }
-        .team-radiant { border-left:3px solid var(--accent-radiant); }
-        .team-dire { border-left:3px solid var(--accent-dire); }
-        .repair-form { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; margin-top:0.75rem; }
-        .repair-form input, .repair-form select { width:100%; padding:0.45rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-secondary); color:var(--text-primary); }
-        .repair-form label { display:block; color:var(--text-secondary); font-size:0.8rem; margin-bottom:0.2rem; }
-        .empty-state { color: var(--text-secondary); font-style: italic; padding: 1rem; }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>Admin Broken Matches</h1>
-        <nav>
-            <a href="/" class="nav-link">Queue</a>
-            <a href="/history" class="nav-link">History</a>
-            <a href="/leaderboard" class="nav-link">Leaderboard</a>
-            <a href="/profile" class="nav-link">Profile</a>
-            <a href="/admin" class="nav-link nav-link-active">Admin</a>
-            {{if .User}}<span class="user-info">{{.User.Name}}</span><a href="/auth/logout" class="btn btn-secondary">Logout</a>{{end}}
-        </nav>
-    </header>
-
-    <main>
+{{template "layout-start" (layout "Admin Broken Matches" "/admin" .User true)}}
         <div class="container">
+            <h2 class="page-title">Admin Broken Matches</h2>
             <div class="admin-section">
                 <h3>Broken Matches ({{len .BrokenMatches}})</h3>
                 {{if .BrokenMatches}}
@@ -110,13 +73,12 @@
                 {{end}}
             </div>
         </div>
-    </main>
+
 
     <script>
         document.body.addEventListener('htmx:afterRequest', function(evt) {
             if (evt.detail.successful) setTimeout(function() { window.location.reload(); }, 300);
         });
     </script>
-</body>
-</html>
+{{template "layout-end"}}
 {{end}}

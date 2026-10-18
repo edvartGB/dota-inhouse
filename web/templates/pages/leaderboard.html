@@ -1,32 +1,5 @@
 {{define "leaderboard.html"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leaderboard - Dota Inhouse</title>
-    <script src="/static/vendor/htmx.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css?v=1">
-</head>
-<body>
-    <header>
-        <h1>Dota Inhouse</h1>
-        <nav>
-            <a href="/" class="nav-link">Queue</a>
-            <a href="/history" class="nav-link">History</a>
-            <a href="/leaderboard" class="nav-link nav-link-active">Leaderboard</a>
-            <a href="/profile" class="nav-link">Profile</a>
-            {{if .IsAdmin}}<a href="/admin" class="nav-link">Admin</a>{{end}}
-            {{if .User}}
-                <span class="user-info">{{.User.Name}}</span>
-                <a href="/auth/logout" class="btn btn-secondary">Logout</a>
-            {{else}}
-                <a href="/auth/login" class="btn btn-primary">Login with Steam</a>
-            {{end}}
-        </nav>
-    </header>
-
-    <main>
+{{template "layout-start" (layout "Leaderboard" "/leaderboard" .User .IsAdmin)}}
         <div class="container">
             <div class="leaderboard-header">
                 <h2>Leaderboard</h2>
@@ -59,9 +32,5 @@
                 {{template "leaderboard-table" .}}
             </div>
         </div>
-    </main>
-
-    <script src="/static/app.js"></script>
-</body>
-</html>
+{{template "layout-end"}}
 {{end}}

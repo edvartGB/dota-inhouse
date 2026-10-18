@@ -18,16 +18,15 @@ func TestMatchHeroURLsResolve(t *testing.T) {
 			t.Errorf("hero id %d missing from table", id)
 			continue
 		}
-		for label, url := range map[string]string{"portrait": PortraitURL(id), "icon": IconURL(id)} {
-			resp, err := http.Head(url)
-			if err != nil {
-				t.Errorf("%s (%d) %s: %v", name, id, label, err)
-				continue
-			}
-			resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("%s (%d) %s: HTTP %d for %s", name, id, label, resp.StatusCode, url)
-			}
+		url := PortraitURL(id)
+		resp, err := http.Head(url)
+		if err != nil {
+			t.Errorf("%s (%d): %v", name, id, err)
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("%s (%d): HTTP %d for %s", name, id, resp.StatusCode, url)
 		}
 	}
 }

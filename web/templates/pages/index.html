@@ -1,8 +1,5 @@
 {{define "index.html"}}
-{{template "base" .}}
-{{end}}
-
-{{define "content"}}
+{{template "layout-start" (layout "" "/" .User .IsAdmin)}}
 <div class="container">
     {{if .User}}
         <div class="main-layout">
@@ -90,6 +87,7 @@
         </div>
     {{end}}
 </div>
+{{template "layout-end"}}
 {{end}}
 
 {{define "draft-page"}}

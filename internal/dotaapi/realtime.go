@@ -62,22 +62,10 @@ func (f *flexUint64) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// PickBan is one entry of the draft. Team is the realtime team number
-// (2 = Radiant, 3 = Dire), matching RealtimeTeam.TeamNumber.
-type PickBan struct {
-	Hero int32  `json:"hero"`
-	Team uint32 `json:"team"`
-}
-
 type RealtimeMatch struct {
 	MatchID   flexUint64 `json:"match_id"`
 	GameTime  int32      `json:"game_time"`
 	GameState uint32     `json:"game_state"`
-	GameMode  uint32     `json:"game_mode"`
-	LeagueID  uint32     `json:"league_id"`
-	LobbyType uint32     `json:"lobby_type"`
-	Picks     []PickBan  `json:"picks"`
-	Bans      []PickBan  `json:"bans"`
 }
 
 type RealtimePlayer struct {
@@ -157,15 +145,4 @@ func (s *RealtimeStats) HeroesByAccountID() map[uint32]int32 {
 		}
 	}
 	return heroes
-}
-
-// PickedCount returns how many players have a hero assigned.
-func (s *RealtimeStats) PickedCount() int {
-	picked := 0
-	for _, hero := range s.HeroesByAccountID() {
-		if hero != 0 {
-			picked++
-		}
-	}
-	return picked
 }

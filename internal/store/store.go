@@ -71,14 +71,10 @@ type Store interface {
 	DeleteSession(ctx context.Context, sessionID string) error
 	DeleteExpiredSessions(ctx context.Context) error
 
-	CreateMatch(ctx context.Context, match *Match) error
 	CreateMatchWithPlayers(ctx context.Context, match *Match, players []MatchPlayer) error
 	UpdateMatch(ctx context.Context, match *Match) error
 	GetMatch(ctx context.Context, matchID string) (*Match, error)
 
-	AddMatchPlayer(ctx context.Context, mp *MatchPlayer) error
-
-	ListMatches(ctx context.Context, limit int) ([]Match, error)
 	ListMatchesPage(ctx context.Context, limit, offset int) ([]Match, error)
 	ListMatchesWithPlayers(ctx context.Context, limit int) ([]MatchWithPlayers, error)
 	ListMatchesWithPlayersPage(ctx context.Context, limit, offset int) ([]MatchWithPlayers, error)

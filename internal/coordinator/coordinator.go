@@ -1,11 +1,12 @@
 package coordinator
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log"
 	"math/rand"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -151,8 +152,6 @@ func (c *Coordinator) handleCommand(cmd Command) {
 		}
 	case MatchAcceptTimeout:
 		c.handleMatchAcceptTimeout(cmd)
-	case BotLobbyReady:
-		c.handleBotLobbyReady(cmd)
 	case BotGameStarted:
 		c.handleBotGameStarted(cmd)
 	case BotGameEnded:
@@ -268,10 +267,7 @@ func (c *Coordinator) startMatchAcceptance() {
 
 	go func() {
 		time.Sleep(MatchAcceptTimeoutDur)
-		c.Send(MatchAcceptTimeout{
-			MatchID:   matchID,
-			StartedAt: deadline.Add(-MatchAcceptTimeoutDur),
-		})
+		c.Send(MatchAcceptTimeout{MatchID: matchID})
 	}()
 }
 
@@ -332,7 +328,6 @@ func (c *Coordinator) handleMatchAcceptTimeout(cmd MatchAcceptTimeout) {
 			acceptedPlayers = append(acceptedPlayers, p)
 		} else {
 			failedPlayers = append(failedPlayers, p)
-			c.emit(PlayerFailedAccept{PlayerID: p.SteamID})
 		}
 	}
 
@@ -685,14 +680,6 @@ func (c *Coordinator) handleAdminResumeLobbyCountdown(cmd AdminResumeLobbyCountd
 	return nil
 }
 
-func (c *Coordinator) handleBotLobbyReady(cmd BotLobbyReady) {
-	match := c.state.GetMatch(cmd.MatchID)
-	if match == nil {
-		return
-	}
-	log.Printf("Match %s: bot lobby ready", cmd.MatchID)
-}
-
 func (c *Coordinator) handleBotLobbyTimeout(cmd BotLobbyTimeout) {
 	match := c.state.GetMatch(cmd.MatchID)
 	if match == nil {
@@ -815,6 +802,7 @@ func (c *Coordinator) handleBotGameEnded(cmd BotGameEnded) {
 		Players:     match.Players,
 		Radiant:     match.Radiant,
 		Dire:        match.Dire,
+		Captains:    match.Captains,
 		Winner:      cmd.Winner,
 	})
 
@@ -874,8 +862,8 @@ func selectCaptains(players []Player) [2]Player {
 	})
 
 	// Stable sort keeps random order within same priority
-	sort.SliceStable(sorted, func(i, j int) bool {
-		return sorted[i].CaptainPriority > sorted[j].CaptainPriority
+	slices.SortStableFunc(sorted, func(a, b Player) int {
+		return cmp.Compare(b.CaptainPriority, a.CaptainPriority)
 	})
 
 	return [2]Player{sorted[0], sorted[1]}
@@ -1024,6 +1012,7 @@ func (c *Coordinator) handleAdminSetMatchResult(cmd AdminSetMatchResult) error {
 		Players:     match.Players,
 		Radiant:     match.Radiant,
 		Dire:        match.Dire,
+		Captains:    match.Captains,
 		Winner:      &winner,
 	})
 

@@ -2,13 +2,14 @@ package web
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -176,31 +177,26 @@ func sanitizeAdminPlayerSort(sortBy, sortDir string) (string, string) {
 }
 
 func sortAdminPlayers(users []store.User, sortBy, sortDir string) {
-	sort.SliceStable(users, func(i, j int) bool {
-		a := users[i]
-		b := users[j]
+	direction := 1
+	if sortDir == "desc" {
+		direction = -1
+	}
 
-		var cmp int
+	slices.SortStableFunc(users, func(a, b store.User) int {
+		byName := strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		bySteamID := strings.Compare(strings.ToLower(a.SteamID), strings.ToLower(b.SteamID))
+
+		var primary int
 		switch sortBy {
 		case "steamid":
-			cmp = strings.Compare(strings.ToLower(a.SteamID), strings.ToLower(b.SteamID))
+			primary = bySteamID
 		case "priority":
-			cmp = compareInt(a.CaptainPriority, b.CaptainPriority)
+			primary = cmp.Compare(a.CaptainPriority, b.CaptainPriority)
 		default:
-			cmp = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+			primary = byName
 		}
 
-		if cmp == 0 {
-			cmp = strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-		}
-		if cmp == 0 {
-			cmp = strings.Compare(strings.ToLower(a.SteamID), strings.ToLower(b.SteamID))
-		}
-
-		if sortDir == "desc" {
-			return cmp > 0
-		}
-		return cmp < 0
+		return direction * cmp.Or(primary, byName, bySteamID)
 	})
 }
 
@@ -249,15 +245,9 @@ func (s *Server) handleAdminCancelMatch(w http.ResponseWriter, r *http.Request) 
 
 	returnToQueue := r.URL.Query().Get("return") != "false"
 
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminCancelMatch{
-		MatchID:       matchID,
-		ReturnToQueue: returnToQueue,
-		Response:      resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.runCommand(w, func(resp chan error) coordinator.Command {
+		return coordinator.AdminCancelMatch{MatchID: matchID, ReturnToQueue: returnToQueue, Response: resp}
+	}) {
 		return
 	}
 
@@ -272,14 +262,9 @@ func (s *Server) handleAdminPauseLobbyCountdown(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminPauseLobbyCountdown{
-		MatchID:  matchID,
-		Response: resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.runCommand(w, func(resp chan error) coordinator.Command {
+		return coordinator.AdminPauseLobbyCountdown{MatchID: matchID, Response: resp}
+	}) {
 		return
 	}
 
@@ -294,14 +279,9 @@ func (s *Server) handleAdminResumeLobbyCountdown(w http.ResponseWriter, r *http.
 		return
 	}
 
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminResumeLobbyCountdown{
-		MatchID:  matchID,
-		Response: resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.runCommand(w, func(resp chan error) coordinator.Command {
+		return coordinator.AdminResumeLobbyCountdown{MatchID: matchID, Response: resp}
+	}) {
 		return
 	}
 
@@ -322,14 +302,9 @@ func (s *Server) handleAdminSetQueueStatus(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminSetQueueOpen{
-		Open:     open,
-		Response: resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.runCommand(w, func(resp chan error) coordinator.Command {
+		return coordinator.AdminSetQueueOpen{Open: open, Response: resp}
+	}) {
 		return
 	}
 
@@ -351,15 +326,9 @@ func (s *Server) handleAdminSetResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminSetMatchResult{
-		MatchID:  matchID,
-		Winner:   winner,
-		Response: resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.runCommand(w, func(resp chan error) coordinator.Command {
+		return coordinator.AdminSetMatchResult{MatchID: matchID, Winner: winner, Response: resp}
+	}) {
 		return
 	}
 
@@ -454,14 +423,9 @@ func (s *Server) handleAdminKickPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminKickFromQueue{
-		PlayerID: playerID,
-		Response: resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.runCommand(w, func(resp chan error) coordinator.Command {
+		return coordinator.AdminKickFromQueue{PlayerID: playerID, Response: resp}
+	}) {
 		return
 	}
 
@@ -572,17 +536,12 @@ func (s *Server) handleAdminSetLobbySettings(w http.ResponseWriter, r *http.Requ
 		leagueID = uint32(parsedLeagueID)
 	}
 
-	resp := make(chan error, 1)
-	s.coordinator.Send(coordinator.AdminSetLobbySettings{
-		Settings: coordinator.LobbySettings{
-			GameMode: gameMode,
-			LeagueID: leagueID,
-		},
-		Response: resp,
-	})
-
-	if err := waitForResponse(resp); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !s.runCommand(w, func(resp chan error) coordinator.Command {
+		return coordinator.AdminSetLobbySettings{
+			Settings: coordinator.LobbySettings{GameMode: gameMode, LeagueID: leagueID},
+			Response: resp,
+		}
+	}) {
 		return
 	}
 

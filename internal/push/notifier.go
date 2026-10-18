@@ -38,11 +38,9 @@ func (n *Notifier) handleEvent(ctx context.Context, event coordinator.Event) {
 	switch e := event.(type) {
 	case coordinator.MatchAcceptStarted:
 		n.handleMatchAcceptStarted(ctx, e)
-	case coordinator.MatchCancelled:
-		n.handleMatchCancelled(ctx, e)
 	case coordinator.DraftStarted:
 		n.handleDraftStarted(ctx, e)
-	// Add more event types as needed
+		// Add more event types as needed
 	}
 }
 
@@ -67,11 +65,6 @@ func (n *Notifier) handleMatchAcceptStarted(ctx context.Context, event coordinat
 	}
 
 	n.service.SendToMultipleUsers(ctx, steamIDs, payload)
-}
-
-func (n *Notifier) handleMatchCancelled(ctx context.Context, event coordinator.MatchCancelled) {
-	log.Printf("Match %s cancelled, could send notification if needed", event.MatchID)
-	// Optional: send cancellation notification
 }
 
 func (n *Notifier) handleDraftStarted(ctx context.Context, event coordinator.DraftStarted) {

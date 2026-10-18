@@ -1,35 +1,7 @@
 {{define "admin-settings.html"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Settings - Dota Inhouse</title>
-    <link rel="stylesheet" href="/static/styles.css">
-    <style>
-        .admin-section { background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
-        .settings-form { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
-        .settings-form label { display:block; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.25rem; }
-        .settings-form select, .settings-form input { padding:0.5rem; border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); font-size:0.9rem; }
-        .queue-controls { display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; }
-        .queue-status { font-size:0.85rem; color:var(--text-secondary); }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>Admin Lobby Settings</h1>
-        <nav>
-            <a href="/" class="nav-link">Queue</a>
-            <a href="/history" class="nav-link">History</a>
-            <a href="/leaderboard" class="nav-link">Leaderboard</a>
-            <a href="/profile" class="nav-link">Profile</a>
-            <a href="/admin" class="nav-link nav-link-active">Admin</a>
-            {{if .User}}<span class="user-info">{{.User.Name}}</span><a href="/auth/logout" class="btn btn-secondary">Logout</a>{{end}}
-        </nav>
-    </header>
-
-    <main>
+{{template "layout-start" (layout "Admin Settings" "/admin" .User true)}}
         <div class="container">
+            <h2 class="page-title">Admin Lobby Settings</h2>
             <div class="admin-section">
                 <h3>Lobby Settings</h3>
                 <form class="settings-form" action="/admin/settings" method="POST">
@@ -61,7 +33,5 @@
                 </div>
             </div>
         </div>
-    </main>
-</body>
-</html>
+{{template "layout-end"}}
 {{end}}

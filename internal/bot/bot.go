@@ -14,7 +14,6 @@ import (
 	"github.com/edvart/dota-inhouse/internal/coordinator"
 	"github.com/edvart/dota-inhouse/internal/dota"
 	"github.com/edvart/dota-inhouse/internal/dotaapi"
-	"github.com/golang/protobuf/proto"
 	"github.com/paralin/go-dota2"
 	"github.com/paralin/go-dota2/cso"
 	devents "github.com/paralin/go-dota2/events"
@@ -23,6 +22,7 @@ import (
 	"github.com/paralin/go-steam/protocol/steamlang"
 	"github.com/paralin/go-steam/steamid"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 )
 
 type Bot struct {
@@ -47,8 +47,6 @@ type Status struct {
 	HasDotaClient bool
 	State         string
 }
-
-const gcMsgLiveScoreboardUpdate = uint32(protocol.EDOTAGCMsg_k_EMsgGCLiveScoreboardUpdate)
 
 var initSteamDirectoryOnce sync.Once
 
@@ -301,10 +299,6 @@ func (b *Bot) processEvent(ctx context.Context, event interface{}, loginInfo *st
 		}
 		return false
 
-	case *devents.UnhandledGCPacket:
-		b.handleUnhandledGCPacket(e)
-		return false
-
 	case error:
 		log.Printf("[%s] Steam client error event: %v", b.name, e)
 		return false
@@ -330,55 +324,6 @@ func (b *Bot) markDotaGCNotReadyLocked() {
 	}
 	b.gcReady = false
 	b.gcReadyCh = make(chan struct{})
-}
-
-func (b *Bot) handleUnhandledGCPacket(event *devents.UnhandledGCPacket) {
-	if event == nil || event.Packet == nil {
-		return
-	}
-
-	packet := event.Packet
-	if packet.MsgType != gcMsgLiveScoreboardUpdate {
-		return
-	}
-
-	update := &protocol.CMsgDOTALiveScoreboardUpdate{}
-	if err := proto.Unmarshal(packet.Body, update); err != nil {
-		log.Printf("[%s] Failed to decode live scoreboard packet: %v", b.name, err)
-		return
-	}
-
-	teamGood := update.GetTeamGood()
-	teamBad := update.GetTeamBad()
-
-	radiantScore := uint32(0)
-	if teamGood != nil {
-		radiantScore = teamGood.GetScore()
-	}
-	direScore := uint32(0)
-	if teamBad != nil {
-		direScore = teamBad.GetScore()
-	}
-
-	radiantPlayers := 0
-	if teamGood != nil {
-		radiantPlayers = len(teamGood.GetPlayers())
-	}
-	direPlayers := 0
-	if teamBad != nil {
-		direPlayers = len(teamBad.GetPlayers())
-	}
-
-	log.Printf(
-		"[%s] GC LIVE SCOREBOARD packet: match_id=%d game_time=%.0fs score=%d-%d players=%d:%d",
-		b.name,
-		update.GetMatchId(),
-		update.GetDuration(),
-		radiantScore,
-		direScore,
-		radiantPlayers,
-		direPlayers,
-	)
 }
 
 func (b *Bot) IsAvailable() bool {
@@ -564,8 +509,6 @@ func (b *Bot) CreateLobby(ctx context.Context, matchID string, players []coordin
 		}
 	}
 
-	commands <- coordinator.BotLobbyReady{MatchID: matchID}
-
 	b.monitorLobbyState(ctx, sessionCtx, dotaClient, matchID, radiant, dire, lobbyDeadline, lobbyTimerControls, commands)
 	return true
 }
@@ -695,10 +638,21 @@ func (b *Bot) monitorLobbyState(ctx context.Context, sessionCtx context.Context,
 	var endGameOnce sync.Once
 	var relaunchTimer *time.Timer
 	var relaunchTimerCh <-chan time.Time
-	lastRunHeroLogKey := ""
-	runHeroSnapshotLogged := false
 	lastGameState := protocol.DOTA_GameState(-1)
 	heroTrackingStarted := false
+	lastCorrectCount := -1
+
+	allPlayersCorrect := func(lobby *protocol.CSODOTALobby) bool {
+		if lobby == nil {
+			return false
+		}
+		correct := countPlayersOnCorrectTeam(lobby, expectedTeam)
+		if correct != lastCorrectCount {
+			lastCorrectCount = correct
+			log.Printf("[%s] Players on correct teams: %d/%d", b.name, correct, len(expectedTeam))
+		}
+		return correct == len(expectedTeam)
+	}
 
 	timeoutLobby := func(reason string) {
 		joinedCorrectly := b.getCorrectlyJoinedPlayers(currentLobby, expectedTeam)
@@ -822,18 +776,6 @@ lobbyTimerReady:
 				log.Printf("[%s] Lobby game_state for match %s: %v", b.name, matchID, gameState)
 			}
 
-			if currentState == protocol.CSODOTALobby_RUN {
-				heroLogKey := formatLobbyHeroIDs(dota2Lobby)
-				if !runHeroSnapshotLogged {
-					runHeroSnapshotLogged = true
-					lastRunHeroLogKey = heroLogKey
-					log.Printf("[%s] RUN lobby initial hero IDs for match %s: %s", b.name, matchID, heroLogKey)
-				} else if heroLogKey != lastRunHeroLogKey {
-					lastRunHeroLogKey = heroLogKey
-					log.Printf("[%s] RUN lobby hero IDs changed for match %s: %s", b.name, matchID, heroLogKey)
-				}
-			}
-
 			if currentState != lastState {
 				prevState := lastState
 				log.Printf("[%s] Lobby state changed: %v -> %v", b.name, prevState, currentState)
@@ -894,7 +836,7 @@ lobbyTimerReady:
 
 			// Check if all players are on correct teams and launch
 			if currentState == protocol.CSODOTALobby_UI && !launched && !gameEnded {
-				if b.checkAllPlayersCorrect(dota2Lobby, expectedTeam) {
+				if allPlayersCorrect(dota2Lobby) {
 					log.Printf("[%s] All players on correct teams! Starting game...", b.name)
 					launched = true
 					stopLobbyTimer()
@@ -912,7 +854,7 @@ lobbyTimerReady:
 				continue
 			}
 
-			if b.checkAllPlayersCorrect(currentLobby, expectedTeam) {
+			if allPlayersCorrect(currentLobby) {
 				log.Printf("[%s] Relaunching game after RUN -> UI regression (attempt %d/%d)",
 					b.name, relaunchAttempts, MaxLobbyRelaunchAttempts)
 				launched = true
@@ -927,16 +869,9 @@ lobbyTimerReady:
 	}
 }
 
-// checkAllPlayersCorrect verifies all expected players are on their correct teams.
-func (b *Bot) checkAllPlayersCorrect(dota2Lobby *protocol.CSODOTALobby, expectedTeam map[uint64]int) bool {
-	if dota2Lobby == nil {
-		return false
-	}
-
-	// Track which expected players have joined correctly
+// countPlayersOnCorrectTeam counts expected players who are on their assigned team.
+func countPlayersOnCorrectTeam(dota2Lobby *protocol.CSODOTALobby, expectedTeam map[uint64]int) int {
 	correctCount := 0
-	expectedCount := len(expectedTeam)
-
 	for _, member := range dota2Lobby.AllMembers {
 		steamID := member.GetId()
 		actualTeam := member.GetTeam()
@@ -959,8 +894,7 @@ func (b *Bot) checkAllPlayersCorrect(dota2Lobby *protocol.CSODOTALobby, expected
 		}
 	}
 
-	log.Printf("[%s] Players on correct teams: %d/%d", b.name, correctCount, expectedCount)
-	return correctCount == expectedCount
+	return correctCount
 }
 
 // getCorrectlyJoinedPlayers returns Steam IDs of players who joined on their correct team.
@@ -1056,14 +990,13 @@ func (b *Bot) pollRealtimeStats(ctx context.Context, serverID uint64, matchID st
 			playerStats := statsBySteamID(stats)
 			gameState := int32(stats.Match.GameState) //nolint:gosec // enum is uint32 on the wire
 			gameTime := stats.Match.GameTime
-			// The lineup and phase are static for most of a match, so only log
-			// and notify on change. Once there's a real clock to show
+			// The lineup and phase are static for most of a match, so only
+			// notify on change. Once there's a real clock to show
 			// (pre-game onward), game time is folded into the key too, so
 			// this naturally updates every poll while the clock is ticking,
 			// which also keeps hero level current since it rides along.
 			if key := liveUpdateKey(heroes, gameState, gameTime); key != lastKey {
 				lastKey = key
-				log.Printf("[%s] %s", b.name, formatRealtimeStats(matchID, stats))
 				select {
 				case commands <- coordinator.BotLiveHeroesUpdated{
 					MatchID:   matchID,
@@ -1178,84 +1111,6 @@ func liveUpdateKey(heroes map[string]int32, gameState int32, gameTime int32) str
 		key += fmt.Sprintf("|time=%d", gameTime)
 	}
 	return key
-}
-
-func formatRealtimeStats(matchID string, stats *dotaapi.RealtimeStats) string {
-	m := stats.Match
-
-	heroes := stats.HeroesByAccountID()
-	accountIDs := make([]uint32, 0, len(heroes))
-	for accountID := range heroes {
-		accountIDs = append(accountIDs, accountID)
-	}
-	sort.Slice(accountIDs, func(i, j int) bool { return accountIDs[i] < accountIDs[j] })
-
-	heroPairs := make([]string, 0, len(accountIDs))
-	for _, accountID := range accountIDs {
-		heroPairs = append(heroPairs, fmt.Sprintf("%d=%d", accountID, heroes[accountID]))
-	}
-
-	return fmt.Sprintf(
-		"match=%s dota_match_id=%d game_state=%v game_time=%d mode=%d lobby_type=%d league=%d picked=%d/%d picks=%s bans=%s heroes=[%s]",
-		matchID,
-		m.MatchID,
-		protocol.DOTA_GameState(m.GameState), //nolint:gosec // enum is uint32 on the wire
-		m.GameTime,
-		m.GameMode,
-		m.LobbyType,
-		m.LeagueID,
-		stats.PickedCount(),
-		len(heroes),
-		formatPickBans(m.Picks),
-		formatPickBans(m.Bans),
-		strings.Join(heroPairs, ", "),
-	)
-}
-
-// formatPickBans renders the draft in the order Valve returned it, as
-// hero:team pairs, so we can see whether order and team attribution survive.
-func formatPickBans(entries []dotaapi.PickBan) string {
-	if len(entries) == 0 {
-		return "none"
-	}
-	parts := make([]string, 0, len(entries))
-	for _, e := range entries {
-		parts = append(parts, fmt.Sprintf("%d:%d", e.Hero, e.Team))
-	}
-	return "[" + strings.Join(parts, ", ") + "]"
-}
-
-func formatLobbyHeroIDs(dota2Lobby *protocol.CSODOTALobby) string {
-	if dota2Lobby == nil {
-		return "none"
-	}
-
-	heroIDsBySteamID := make(map[uint64]int32)
-	for _, member := range dota2Lobby.GetAllMembers() {
-		heroID := member.GetHeroId()
-		if heroID <= 0 {
-			continue
-		}
-		heroIDsBySteamID[member.GetId()] = heroID
-	}
-
-	if len(heroIDsBySteamID) == 0 {
-		return "none"
-	}
-
-	steamIDs := make([]uint64, 0, len(heroIDsBySteamID))
-	for steamID := range heroIDsBySteamID {
-		steamIDs = append(steamIDs, steamID)
-	}
-	sort.Slice(steamIDs, func(i, j int) bool {
-		return steamIDs[i] < steamIDs[j]
-	})
-
-	parts := make([]string, 0, len(steamIDs))
-	for _, steamID := range steamIDs {
-		parts = append(parts, fmt.Sprintf("%d=%d", steamID, heroIDsBySteamID[steamID]))
-	}
-	return fmt.Sprintf("%d/%d [%s]", len(heroIDsBySteamID), len(dota2Lobby.GetAllMembers()), strings.Join(parts, ", "))
 }
 
 // Disconnect cleanly disconnects the bot from Steam.

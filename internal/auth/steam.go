@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/edvart/dota-inhouse/internal/store"
@@ -158,27 +157,6 @@ func (sa *SteamAuth) fetchSteamUser(ctx context.Context, steamID string) (*Steam
 	return &result.Response.Players[0], nil
 }
 
-// MeHandler returns the current user's info.
-func (sa *SteamAuth) MeHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := sa.sessions.GetUser(r.Context(), r)
-	if err != nil {
-		http.Error(w, "Failed to get user", http.StatusInternalServerError)
-		return
-	}
-
-	if user == nil {
-		http.Error(w, "Not logged in", http.StatusUnauthorized)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"steamId":   user.SteamID,
-		"name":      user.Name,
-		"avatarUrl": user.AvatarURL,
-	})
-}
-
 // RequireAuth middleware ensures the request has a valid session.
 func RequireAuth(sessions *SessionManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -204,16 +182,4 @@ const userContextKey contextKey = "user"
 func UserFromContext(ctx context.Context) *store.User {
 	user, _ := ctx.Value(userContextKey).(*store.User)
 	return user
-}
-
-// SteamIDFromOpenIDURL extracts the Steam ID from an OpenID identity URL.
-func SteamIDFromOpenIDURL(idURL string) string {
-	// Handle both formats
-	if strings.HasPrefix(idURL, "https://steamcommunity.com/openid/id/") {
-		return strings.TrimPrefix(idURL, "https://steamcommunity.com/openid/id/")
-	}
-	if strings.HasPrefix(idURL, "http://steamcommunity.com/openid/id/") {
-		return strings.TrimPrefix(idURL, "http://steamcommunity.com/openid/id/")
-	}
-	return ""
 }

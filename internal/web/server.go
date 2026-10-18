@@ -1,11 +1,12 @@
 package web
 
 import (
+	"cmp"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -106,7 +107,6 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 	r.Get("/auth/login", s.steamAuth.LoginHandler)
 	r.Get("/auth/callback", s.steamAuth.CallbackHandler)
 	r.Get("/auth/logout", s.steamAuth.LogoutHandler)
-	r.Get("/me", s.steamAuth.MeHandler)
 
 	r.Get("/events", s.handleSSE)
 
@@ -126,7 +126,6 @@ func (s *Server) setupRoutes(staticFS fs.FS) {
 
 		// Push subscription management
 		r.Post("/api/push/subscribe", s.handleSubscribePush)
-		r.Post("/api/push/unsubscribe", s.handleUnsubscribePush)
 	})
 
 	r.Get("/", s.handleIndex)
@@ -341,48 +340,24 @@ func compareLeaderboardField(a, b store.LeaderboardEntry, sortBy string) int {
 	case "name":
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	case "wins":
-		return compareInt(a.Wins, b.Wins)
+		return cmp.Compare(a.Wins, b.Wins)
 	case "losses":
-		return compareInt(a.Losses, b.Losses)
+		return cmp.Compare(a.Losses, b.Losses)
 	case "winrate":
-		return compareFloat(a.WinRate, b.WinRate)
+		return cmp.Compare(a.WinRate, b.WinRate)
 	case "streak":
-		return compareInt(a.Streak, b.Streak)
+		return cmp.Compare(a.Streak, b.Streak)
 	default:
-		return compareInt(a.Delta, b.Delta)
+		return cmp.Compare(a.Delta, b.Delta)
 	}
 }
 
 func compareLeaderboardTieBreak(a, b store.LeaderboardEntry) int {
-	if cmp := compareInt(b.Delta, a.Delta); cmp != 0 {
-		return cmp
-	}
-	if cmp := compareInt(b.Total, a.Total); cmp != 0 {
-		return cmp
-	}
-	return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-}
-
-func compareInt(a, b int) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func compareFloat(a, b float64) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
+	return cmp.Or(
+		cmp.Compare(b.Delta, a.Delta),
+		cmp.Compare(b.Total, a.Total),
+		strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+	)
 }
 
 func sortLeaderboardEntries(entries []store.LeaderboardEntry, sortBy, sortDir string) {
@@ -391,16 +366,8 @@ func sortLeaderboardEntries(entries []store.LeaderboardEntry, sortBy, sortDir st
 		direction = -1
 	}
 
-	sort.SliceStable(entries, func(i, j int) bool {
-		a := entries[i]
-		b := entries[j]
-
-		cmp := compareLeaderboardField(a, b, sortBy)
-		if cmp == 0 {
-			cmp = compareLeaderboardTieBreak(a, b)
-		}
-
-		return cmp*direction < 0
+	slices.SortStableFunc(entries, func(a, b store.LeaderboardEntry) int {
+		return direction * cmp.Or(compareLeaderboardField(a, b, sortBy), compareLeaderboardTieBreak(a, b))
 	})
 }
 
